@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PageForge – HTML Page Designer</title>
+  <link rel="stylesheet" href="css/app.css?v=6.1">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚒️</text></svg>">
+</head>
+<body>
+
+  <div class="loading-screen" id="loading-screen">
+    <div class="ld-spin">
+      <div class="ld-ico">⚒️</div>
+      <div class="ld-txt">PageForge</div>
+    </div>
+  </div>
+
+  <div class="app">
+    <header class="hdr">
+      <div class="logo">
+        <span class="logo-ico">⚒️</span>
+        <span class="logo-txt">PageForge</span>
+        <span class="logo-ver">v5</span>
+      </div>
+      <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="editor"><span class="tab-ico">✏️</span> Editor</button>
+        <button class="tab-btn" data-tab="library"><span class="tab-ico">📚</span> Bibliothek</button>
+        <button class="tab-btn" data-tab="collections"><span class="tab-ico">📑</span> Collectionen</button>
+        <button class="tab-btn" data-tab="css-templates"><span class="tab-ico">🎨</span> Templates</button>
+      </nav>
+      <div class="hdr-r">
+        <div class="backup-badge bb-none" id="backup-badge">
+          <span class="bb-dot"></span>
+          <span class="bb-text">…</span>
+        </div>
+        <button class="set-btn" id="btn-settings" title="Einstellungen">⚙️</button>
+        <div class="set-menu" id="settings-menu">
+          <div class="set-section-label">Daten</div>
+          <button class="set-item" id="btn-link-file"><span>📁</span> Datendatei verknüpfen…</button>
+          <button class="set-item" id="btn-load-file"><span>📂</span> Aus Datei laden…</button>
+          <div class="set-div"></div>
+          <button class="set-item" id="btn-export-data"><span>📤</span> Backup herunterladen (.json)</button>
+          <button class="set-item" id="btn-import-data"><span>📥</span> Backup importieren (.json)</button>
+          <div class="set-div"></div>
+          <div class="set-section-label">Konfiguration</div>
+          <button class="set-item" id="btn-manage-categories"><span>🏷️</span> Kategorien verwalten</button>
+        </div>
+      </div>
+    </header>
+    <main class="tab-content">
+      <div class="tab-panel active" id="tab-editor"></div>
+      <div class="tab-panel" id="tab-library"></div>
+      <div class="tab-panel" id="tab-collections"></div>
+      <div class="tab-panel" id="tab-css-templates"></div>
+    </main>
+  </div>
+
+  <script src="js/core/events.js?v=6.1"></script>
+  <script src="js/core/db.js?v=6.1"></script>
+  <script src="js/core/placeholders.js?v=6.1"></script>
+  <script src="js/modules/editor.js?v=6.1"></script>
+  <script src="js/modules/library.js?v=6.1"></script>
+  <script src="js/modules/collections.js?v=6.1"></script>
+  <script src="js/modules/css-templates.js?v=6.1"></script>
+  <script src="js/app.js?v=6.1"></script>
+</body>
+</html>
