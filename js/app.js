@@ -221,6 +221,17 @@ const PageForge = (() => {
       PageForgeEvents.emit(PageForgeEvents.EVENTS.CATEGORY_ADDED, { id, name, icon });
       PageForgeEvents.emit(PageForgeEvents.EVENTS.TOAST, { message: `"${name}" hinzugefügt`, type: 'success' });
     });
+
+    // Profimodus toggle
+    const chkProfi = document.getElementById('chk-profi');
+    chkProfi.checked = localStorage.getItem('pf-profi') === '1';
+    chkProfi.addEventListener('change', () => {
+      localStorage.setItem('pf-profi', chkProfi.checked ? '1' : '0');
+      PageForgeEvents.emit(PageForgeEvents.EVENTS.TOAST, {
+        message: chkProfi.checked ? 'Profimodus aktiviert' : 'Standardmodus',
+        type: 'success'
+      });
+    });
   }
 
   async function refreshAll() {
@@ -236,6 +247,12 @@ const PageForge = (() => {
     if (!btn || !modal) return;
 
     const versions = [
+      { v: '7.8', date: '09.02.2026', items: [
+        'Profimodus: Einstellung unter ⚙️ → aktiviert Auto-Paste bei ➕',
+        'Im Profimodus liest ➕ automatisch die Zwischenablage und fügt HTML ein',
+        'Standardmodus: ➕ öffnet wie bisher leeren Editor',
+        'Einstellung wird dauerhaft gespeichert (localStorage)',
+      ]},
       { v: '7.7', date: '09.02.2026', items: [
         'Auto-Titel: Titel wird aus &lt;h1&gt;, &lt;h2&gt; oder &lt;title&gt; vorgeschlagen',
         'Greift bei Code einfügen und Vorlage laden (nur wenn Titel-Feld leer)',

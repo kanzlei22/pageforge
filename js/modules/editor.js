@@ -787,7 +787,7 @@ const EditorModule = (() => {
     PageForgeEvents.emit(PageForgeEvents.EVENTS.TAB_CHANGED, 'editor');
   }
 
-  function newSnippet() {
+  async function newSnippet() {
     currentSnippet = null; extractedCss = ''; extractedHtml = '';
     $('editor-title').value = ''; $('editor-category').value = ''; $('editor-status').value = 'draft';
     $('editor-tags').value = ''; $('code-textarea').value = '';
@@ -795,6 +795,26 @@ const EditorModule = (() => {
     if ($('editor-chapter')) { $('editor-chapter').value = ''; $('editor-chapter').style.display = 'none'; }
     showVersionButtons(false);
     $('preview-empty').style.display = ''; $('a4-container').style.display = 'none';
+
+    // Profimodus: auto-paste from clipboard if it looks like HTML
+    if (localStorage.getItem('pf-profi') === '1') {
+      try {
+        const clip = await navigator.clipboard.readText();
+        if (clip && clip.trim().length > 50 && /<!doctype|<html|<head|<body|<div|<style/i.test(clip)) {
+          currentSnippet = { htmlContent: clip, status: 'draft', tags: [], versions: [] };
+          const parsed = parseHtmlAndCss(clip);
+          extractedCss = parsed.css; extractedHtml = parsed.htmlShell;
+          currentSnippet.originalCss = extractedCss;
+          $('code-textarea').value = clip;
+          suggestTitle(clip);
+          $('preview-empty').style.display = 'none';
+          $('a4-container').style.display = '';
+          renderPreview();
+          toast('HTML aus Zwischenablage eingefügt', 'success');
+          return;
+        }
+      } catch (e) { /* clipboard access denied */ }
+    }
   }
 
   // ── Helpers ──
