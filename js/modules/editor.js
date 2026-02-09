@@ -49,6 +49,7 @@ const EditorModule = (() => {
           <div class="etb-right">
             <input type="text" id="editor-tags" class="tags-input-v2" placeholder="Tags (kommagetrennt)…" />
             <select id="editor-collection" class="tsel-v2" title="Zu Collection hinzufügen"><option value="">📑 Collection…</option></select>
+            <select id="editor-chapter" class="tsel-v2" title="Kapitel wählen" style="display:none"><option value="">📖 Einzelseite</option></select>
             <button id="btn-code-drawer" class="tb2 tb2-outline" title="HTML Code">{ } Code</button>
             <button id="btn-css-swap" class="tb2 tb2-outline" title="CSS austauschen">🎨 CSS</button>
             <button id="btn-images" class="tb2 tb2-outline" title="Bilder verwalten">🖼️</button>
@@ -181,6 +182,7 @@ const EditorModule = (() => {
     $('btn-save-new-version').addEventListener('click', saveNewVersion);
     $('btn-new-snippet').addEventListener('click', newSnippet);
     $('btn-preview-print').addEventListener('click', printPreview);
+    $('editor-collection').addEventListener('change', updateChapterDropdown);
 
     document.querySelectorAll('.zbtn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -578,19 +580,43 @@ const EditorModule = (() => {
       colSel.appendChild(o);
     });
     colSel.value = cv;
+    updateChapterDropdown();
+  }
+
+  async function updateChapterDropdown() {
+    const colId = $('editor-collection')?.value;
+    const chSel = $('editor-chapter');
+    if (!chSel) return;
+    if (!colId) { chSel.style.display = 'none'; chSel.value = ''; return; }
+    const col = await PageForgeDB.get('collections', colId);
+    if (!col) { chSel.style.display = 'none'; return; }
+    const chapters = (col.items || []).filter(i => i.type === 'chapter');
+    if (!chapters.length) { chSel.style.display = 'none'; chSel.value = ''; return; }
+    const cv = chSel.value;
+    chSel.innerHTML = '<option value="">📄 Einzelseite</option>';
+    (col.items || []).forEach((item, idx) => {
+      if (item.type !== 'chapter') return;
+      const o = document.createElement('option');
+      o.value = String(idx);
+      o.textContent = `📖 ${item.name} (${item.snippetIds?.length || 0})`;
+      chSel.appendChild(o);
+    });
+    chSel.value = cv;
+    chSel.style.display = '';
   }
 
   function detectCollectionMembership(snippetId) {
-    if (!snippetId) return '';
+    if (!snippetId) return Promise.resolve({ colId: '', chapterIdx: '' });
     return new Promise(async resolve => {
       const collections = await PageForgeDB.getAll('collections');
       for (const col of collections) {
-        for (const item of (col.items || [])) {
-          if (item.type === 'page' && item.snippetId === snippetId) return resolve(col.id);
-          if (item.type === 'chapter' && item.snippetIds?.includes(snippetId)) return resolve(col.id);
+        for (let i = 0; i < (col.items || []).length; i++) {
+          const item = col.items[i];
+          if (item.type === 'page' && item.snippetId === snippetId) return resolve({ colId: col.id, chapterIdx: '' });
+          if (item.type === 'chapter' && item.snippetIds?.includes(snippetId)) return resolve({ colId: col.id, chapterIdx: String(i) });
         }
       }
-      resolve('');
+      resolve({ colId: '', chapterIdx: '' });
     });
   }
 
@@ -608,7 +634,12 @@ const EditorModule = (() => {
     );
     if (alreadyIn) return;
 
-    col.items.push({ type: 'page', snippetId });
+    const chapterIdx = $('editor-chapter')?.value;
+    if (chapterIdx !== '' && chapterIdx !== undefined && col.items[parseInt(chapterIdx)]?.type === 'chapter') {
+      col.items[parseInt(chapterIdx)].snippetIds.push(snippetId);
+    } else {
+      col.items.push({ type: 'page', snippetId });
+    }
     await PageForgeDB.saveCollection(col);
     PageForgeEvents.emit(PageForgeEvents.EVENTS.COLLECTION_SAVED, col);
   }
@@ -730,7 +761,14 @@ const EditorModule = (() => {
     $('code-textarea').value = snippet.htmlContent || '';
     // Detect collection membership
     loadCollectionDropdown().then(() => {
-      detectCollectionMembership(snippet.id).then(val => { if ($('editor-collection')) $('editor-collection').value = val; });
+      detectCollectionMembership(snippet.id).then(({ colId, chapterIdx }) => {
+        if ($('editor-collection')) {
+          $('editor-collection').value = colId;
+          updateChapterDropdown().then(() => {
+            if ($('editor-chapter') && chapterIdx) $('editor-chapter').value = chapterIdx;
+          });
+        }
+      });
     });
     PageForgeEvents.emit(PageForgeEvents.EVENTS.TAB_CHANGED, 'editor');
   }
@@ -740,6 +778,7 @@ const EditorModule = (() => {
     $('editor-title').value = ''; $('editor-category').value = ''; $('editor-status').value = 'draft';
     $('editor-tags').value = ''; $('code-textarea').value = '';
     if ($('editor-collection')) $('editor-collection').value = '';
+    if ($('editor-chapter')) { $('editor-chapter').value = ''; $('editor-chapter').style.display = 'none'; }
     showVersionButtons(false);
     $('preview-empty').style.display = ''; $('a4-container').style.display = 'none';
   }

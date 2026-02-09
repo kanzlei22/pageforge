@@ -236,6 +236,11 @@ const PageForge = (() => {
     if (!btn || !modal) return;
 
     const versions = [
+      { v: '7.4', date: '09.02.2026', items: [
+        'Zwei-Dropdown-System: Collection wählen → Kapitel erscheint dynamisch',
+        'Kapitel-Dropdown zeigt Namen + Seitenzahl, Default: „Einzelseite"',
+        'Auto-Erkennung: Beim Laden wird Collection UND Kapitel vorausgewählt',
+      ]},
       { v: '7.3', date: '09.02.2026', items: [
         'App-Versionshistorie: Klick auf Versionsnummer öffnet kompletten Changelog',
         'Collection-Dropdown im Editor vereinfacht (nur Collection, keine Kapitel)',
