@@ -47,11 +47,80 @@ const CollectionsModule = (() => {
           <div class="col-editor" id="col-editor" style="display:none">
             <div class="col-info-bar">
               <input type="text" id="col-name" class="col-name-inp" placeholder="Collection Name…" />
-              <input type="text" id="col-author" class="col-desc-inp" placeholder="Autor…" style="flex:0 1 160px" />
-              <input type="text" id="col-desc" class="col-desc-inp" placeholder="Beschreibung…" />
+              <button id="btn-col-placeholders" class="tb2 tb2-outline tb2-sm" title="Platzhalter-Werte für diese Collection">⚙️ Platzhalter</button>
               <button id="btn-master-css" class="tb2 tb2-outline tb2-sm" title="Master CSS für alle Seiten">🎨 Master CSS</button>
               <button id="btn-save-col" class="tb2 tb2-primary tb2-sm">💾</button>
               <button id="btn-export-print" class="tb2 tb2-outline tb2-sm">🖨️ PDF</button>
+            </div>
+
+            <!-- Collection Platzhalter Modal -->
+            <div class="modal-backdrop" id="modal-col-placeholders" style="display:none">
+              <div class="modal-content" style="max-width:520px">
+                <div class="modal-header"><h3>⚙️ Collection Platzhalter</h3><button class="modal-close" id="colph-close">✕</button></div>
+                <div class="modal-body">
+                  <p class="meta-dim" style="margin:0 0 16px;font-size:12px">Diese Werte gelten für alle Seiten dieser Collection und werden beim PDF-Export in <code>{{platzhalter}}</code> eingesetzt.</p>
+
+                  <div class="colph-row">
+                    <label>Autor <code>{{autor}}</code></label>
+                    <input type="text" id="colph-autor" class="colph-inp" placeholder="z.B. Max Mustermann" />
+                  </div>
+                  <div class="colph-row">
+                    <label>Copyright <code>{{copyright}}</code></label>
+                    <input type="text" id="colph-copyright" class="colph-inp" placeholder="z.B. © vfsverband" />
+                  </div>
+                  <div class="colph-row">
+                    <label>Untertitel <code>{{untertitel}}</code></label>
+                    <input type="text" id="colph-untertitel" class="colph-inp" placeholder="z.B. Investorenworkshop" />
+                  </div>
+                  <div class="colph-row">
+                    <label>Beschreibung <span class="meta-dim">(intern, nicht als Platzhalter)</span></label>
+                    <input type="text" id="colph-desc" class="colph-inp" placeholder="Interne Notizen…" />
+                  </div>
+
+                  <div class="pdf-hint" style="margin-top:16px">
+                    <strong>Im HTML verwenden:</strong><br>
+                    <code>{{copyright}}</code> → wird zu „© vfsverband"<br>
+                    <code>{{untertitel}}</code> → wird zu „Investorenworkshop"<br>
+                    <code>{{autor}}</code> <code>{{collection}}</code> <code>{{datum}}</code> <code>{{kapitel}}</code> <code>{{seitenzahl}}</code> <code>{{gesamtseiten}}</code>
+                  </div>
+                </div>
+                <div class="modal-footer">
+                  <button id="colph-save" class="tb2 tb2-primary">💾 Speichern</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- PDF Export Modal -->
+            <div class="modal-backdrop" id="modal-pdf-export" style="display:none">
+              <div class="modal-content" style="max-width:520px">
+                <div class="modal-header"><h3>🖨️ PDF-Export</h3><button class="modal-close" id="pdf-modal-close">✕</button></div>
+                <div class="modal-body">
+
+                  <div class="pdf-section">
+                    <label class="pdf-label">
+                      <input type="checkbox" id="pdf-cover" /> Deckblatt – erste Seite bekommt <code>{{seitenzahl}}</code> = leer
+                    </label>
+                  </div>
+
+                  <div class="pdf-section">
+                    <label class="pdf-label">Startnummer</label>
+                    <div style="display:flex;gap:8px;align-items:center">
+                      <input type="number" id="pdf-start-nr" value="1" min="1" max="999" class="pdf-num" style="width:70px" />
+                      <span class="meta-dim">Seitennummerierung beginnt bei diesem Wert</span>
+                    </div>
+                  </div>
+
+                  <div class="pdf-hint">
+                    <strong>Tipp:</strong> Platzhalter in deinen Seiten werden automatisch aufgelöst:<br>
+                    <code>{{seitenzahl}}</code> <code>{{gesamtseiten}}</code> <code>{{collection}}</code> <code>{{kapitel}}</code> <code>{{copyright}}</code> <code>{{untertitel}}</code> <code>{{autor}}</code> <code>{{datum}}</code><br><br>
+                    Werte für <code>{{copyright}}</code>, <code>{{autor}}</code> etc. setzt du über ⚙️ <strong>Platzhalter</strong>.
+                  </div>
+
+                </div>
+                <div class="modal-footer">
+                  <button id="btn-pdf-go" class="tb2 tb2-primary">🖨️ PDF erzeugen</button>
+                </div>
+              </div>
             </div>
             <div class="col-chapter-header" id="col-chapter-header">
               <h3 id="col-chapter-title">—</h3>
@@ -104,7 +173,19 @@ const CollectionsModule = (() => {
     $('btn-add-chapter').addEventListener('click', addChapter);
     $('btn-add-standalone').addEventListener('click', openAddStandalone);
     $('btn-save-col').addEventListener('click', saveCollection);
-    $('btn-export-print').addEventListener('click', exportPdf);
+    $('btn-col-placeholders').addEventListener('click', openColPlaceholders);
+    $('colph-close').addEventListener('click', () => $('modal-col-placeholders').style.display = 'none');
+    $('modal-col-placeholders').addEventListener('click', e => { if (e.target.id === 'modal-col-placeholders') e.target.style.display = 'none'; });
+    $('colph-save').addEventListener('click', saveColPlaceholders);
+    $('btn-export-print').addEventListener('click', () => {
+      if (!active) return;
+      if (!countAllPages(active)) { toast('Collection ist leer', 'warning'); return; }
+      loadPdfSettings();
+      $('modal-pdf-export').style.display = 'flex';
+    });
+    $('pdf-modal-close').addEventListener('click', () => $('modal-pdf-export').style.display = 'none');
+    $('modal-pdf-export').addEventListener('click', e => { if (e.target.id === 'modal-pdf-export') e.target.style.display = 'none'; });
+    $('btn-pdf-go').addEventListener('click', () => { savePdfSettings(); $('modal-pdf-export').style.display = 'none'; exportPdf(); });
     $('btn-add-pages').addEventListener('click', openAddPages);
     $('btn-rename-item').addEventListener('click', renameItem);
     $('btn-del-item').addEventListener('click', deleteItem);
@@ -163,8 +244,6 @@ const CollectionsModule = (() => {
     $('btn-del-col').style.display = '';
     $('col-sb-footer').style.display = '';
     $('col-name').value = active.name || '';
-    $('col-author').value = active.author || '';
-    $('col-desc').value = active.description || '';
     $('col-select').value = id;
     renderSidebar(); renderPages();
   }
@@ -422,11 +501,13 @@ const CollectionsModule = (() => {
     const item = active.items[itemIdx];
     return {
       collection: active?.name || '',
+      untertitel: active?.untertitel || '',
       kapitel: item?.type === 'chapter' ? (item.name || '') : '',
       kapitelnr: String(getChapterNumber(itemIdx)),
       seitenzahl: String(getGlobalOffset(itemIdx) + pageIdx + 1),
       gesamtseiten: String(totalPages),
       autor: active?.author || '',
+      copyright: active?.copyright || '',
       datum: new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }),
     };
   }
@@ -510,11 +591,32 @@ const CollectionsModule = (() => {
     updateDropdown();
   }
 
+  // ── Collection Platzhalter ──
+
+  function openColPlaceholders() {
+    if (!active) return;
+    $('colph-autor').value = active.author || '';
+    $('colph-copyright').value = active.copyright || '';
+    $('colph-untertitel').value = active.untertitel || '';
+    $('colph-desc').value = active.description || '';
+    $('modal-col-placeholders').style.display = 'flex';
+  }
+
+  async function saveColPlaceholders() {
+    if (!active) return;
+    active.author = $('colph-autor').value.trim();
+    active.copyright = $('colph-copyright').value.trim();
+    active.untertitel = $('colph-untertitel').value.trim();
+    active.description = $('colph-desc').value.trim();
+    await autoSave();
+    $('modal-col-placeholders').style.display = 'none';
+    renderPages(); // re-render previews with new placeholder values
+    toast('Platzhalter gespeichert', 'success');
+  }
+
   async function saveCollection() {
     if (!active) return;
     active.name = $('col-name').value.trim() || 'Unbenannt';
-    active.author = $('col-author').value.trim();
-    active.description = $('col-desc').value.trim();
     await autoSave();
     renderSidebar();
     toast('Gespeichert', 'success');
@@ -623,11 +725,39 @@ const CollectionsModule = (() => {
 
   // ── PDF Export ──
 
+  function getPdfSettings() {
+    return {
+      cover: $('pdf-cover')?.checked || false,
+      startNr: parseInt($('pdf-start-nr')?.value) || 1,
+    };
+  }
+
+  function loadPdfSettings() {
+    const s = active?.pdfSettings;
+    if (!s) return;
+    $('pdf-cover').checked = !!s.cover;
+    if (s.startNr) $('pdf-start-nr').value = s.startNr;
+  }
+
+  async function savePdfSettings() {
+    if (!active) return;
+    active.pdfSettings = getPdfSettings();
+    await autoSave();
+  }
+
+  function resolveHfTemplate(tpl, vars) {
+    if (!tpl) return '';
+    return tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? '');
+  }
+
   async function exportPdf() {
     if (!active) return;
     const totalPages = countAllPages(active);
     if (!totalPages) { toast('Collection ist leer', 'warning'); return; }
     toast('PDF wird vorbereitet…', 'info');
+
+    const s = getPdfSettings();
+    const displayTotal = s.cover ? totalPages - 1 : totalPages;
 
     let html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>@page{size:A4;margin:0}*,*::before,*::after{box-sizing:border-box}
@@ -641,13 +771,13 @@ ${active.masterCss ? `.pf-page{${active.masterCss}}` : ''}
     for (let ii = 0; ii < active.items.length; ii++) {
       const item = active.items[ii];
       if (item.type === 'page') {
-        const s = await PageForgeDB.get('snippets', item.snippetId);
-        if (s) { const v = buildVars(ii, 0, totalPages); v.seitentitel = s.title || ''; html += buildPdfPage(s, v, gp); }
+        const sn = await PageForgeDB.get('snippets', item.snippetId);
+        if (sn) html += buildPdfPage(sn, ii, 0, gp, totalPages, displayTotal, s);
         gp++;
       } else {
         for (let si = 0; si < (item.snippetIds?.length || 0); si++) {
-          const s = await PageForgeDB.get('snippets', item.snippetIds[si]);
-          if (s) { const v = buildVars(ii, si, totalPages); v.seitentitel = s.title || ''; html += buildPdfPage(s, v, gp); }
+          const sn = await PageForgeDB.get('snippets', item.snippetIds[si]);
+          if (sn) html += buildPdfPage(sn, ii, si, gp, totalPages, displayTotal, s);
           gp++;
         }
       }
@@ -660,7 +790,16 @@ ${active.masterCss ? `.pf-page{${active.masterCss}}` : ''}
     w.onload = () => setTimeout(() => { w.focus(); w.print(); }, 500);
   }
 
-  function buildPdfPage(snippet, vars, gp) {
+  function buildPdfPage(snippet, itemIdx, pageIdx, gp, totalPages, displayTotal, s) {
+    const isCover = s.cover && gp === 0;
+    // Page number: cover page gets empty string, rest counts from startNr
+    const pageNr = isCover ? '' : String(s.startNr + (s.cover ? gp - 1 : gp));
+
+    const vars = buildVars(itemIdx, pageIdx, totalPages);
+    vars.seitentitel = snippet.title || '';
+    vars.seitenzahl = pageNr;
+    vars.gesamtseiten = String(displayTotal);
+
     let raw = PageForgePlaceholders.resolve(snippet.htmlContent || '', vars);
     const sid = `pf-s${gp}`;
     const p = new DOMParser(), doc = p.parseFromString(raw, 'text/html');

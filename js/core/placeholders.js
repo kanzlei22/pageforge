@@ -11,7 +11,9 @@ const PageForgePlaceholders = (() => {
     { key: 'kapitel', label: 'Kapitel', desc: 'Name des aktuellen Kapitels' },
     { key: 'kapitelnr', label: 'Kapitelnr', desc: 'Nummer des Kapitels (1, 2, 3…)' },
     { key: 'collection', label: 'Collection', desc: 'Name der Collection' },
+    { key: 'untertitel', label: 'Untertitel', desc: 'Untertitel der Collection (z.B. Investorenworkshop)' },
     { key: 'autor', label: 'Autor', desc: 'Autorname (aus Collection)' },
+    { key: 'copyright', label: 'Copyright', desc: 'Copyright-Zeile (z.B. © vfsverband)' },
     { key: 'datum', label: 'Datum', desc: 'Heutiges Datum' },
   ];
 

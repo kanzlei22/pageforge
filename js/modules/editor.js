@@ -257,10 +257,23 @@ const EditorModule = (() => {
     const parsed = parseHtmlAndCss(code);
     extractedCss = parsed.css; extractedHtml = parsed.htmlShell;
     if (!currentSnippet.originalCss) currentSnippet.originalCss = extractedCss;
+    suggestTitle(code);
     renderPreview();
     closeCodeDrawer();
     $('preview-empty').style.display = 'none';
     $('a4-container').style.display = '';
+  }
+
+  function suggestTitle(html) {
+    if ($('editor-title').value.trim()) return; // already has a title
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    // Try h1 first, then h2, then <title>
+    const h1 = doc.querySelector('h1');
+    if (h1?.textContent?.trim()) { $('editor-title').value = h1.textContent.trim(); return; }
+    const h2 = doc.querySelector('h2');
+    if (h2?.textContent?.trim()) { $('editor-title').value = h2.textContent.trim(); return; }
+    const title = doc.querySelector('title');
+    if (title?.textContent?.trim()) { $('editor-title').value = title.textContent.trim(); }
   }
 
   function copyCode() {
@@ -384,6 +397,7 @@ const EditorModule = (() => {
         $('editor-status').value = 'draft';
         $('editor-tags').value = '';
         $('code-textarea').value = t.htmlContent;
+        suggestTitle(t.htmlContent);
         $('preview-empty').style.display = 'none';
         $('a4-container').style.display = '';
         renderPreview();

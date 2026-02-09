@@ -143,6 +143,19 @@ html,body{height:100%;font-family:var(--ff);background:var(--bg0);color:var(--tx
 .logo-ver{cursor:pointer;transition:color var(--fast)}
 .logo-ver:hover{color:var(--acc)}
 .ver-actions{flex-shrink:0}
+.pdf-section{margin-bottom:16px}
+.pdf-label{font-size:13px;font-weight:500;color:var(--tx1);display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.pdf-label input[type="checkbox"]{accent-color:var(--acc)}
+.pdf-label code{background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:11px;color:var(--acc)}
+.pdf-num{background:var(--bg2);border:1px solid var(--brd);color:var(--tx1);padding:5px 8px;border-radius:var(--r-sm);font:inherit;font-size:12px;outline:none}
+.pdf-num:focus{border-color:var(--acc)}
+.pdf-hint{font-size:11px;color:var(--tx3);background:var(--bg2);padding:10px 14px;border-radius:var(--r-sm);line-height:1.7}
+.pdf-hint code{background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:10px;color:var(--acc)}
+.colph-row{margin-bottom:14px}
+.colph-row label{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--tx2);margin-bottom:4px}
+.colph-row label code{background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:10px;color:var(--acc)}
+.colph-inp{width:100%;background:var(--bg2);border:1px solid var(--brd);color:var(--tx1);padding:8px 12px;border-radius:var(--r-sm);font:inherit;font-size:13px;outline:none}
+.colph-inp:focus{border-color:var(--acc)}
 .footer-note{font-size:11px;color:var(--tx3);margin-right:auto}
 .label-badge{font-size:9px;background:var(--bg3);padding:1px 6px;border-radius:8px;color:var(--tx3);vertical-align:middle}
 .swap-label{font-size:11px;color:var(--tx3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;display:block}

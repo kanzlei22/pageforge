@@ -236,6 +236,23 @@ const PageForge = (() => {
     if (!btn || !modal) return;
 
     const versions = [
+      { v: '7.7', date: '09.02.2026', items: [
+        'Auto-Titel: Titel wird aus &lt;h1&gt;, &lt;h2&gt; oder &lt;title&gt; vorgeschlagen',
+        'Greift bei Code einfügen und Vorlage laden (nur wenn Titel-Feld leer)',
+      ]},
+      { v: '7.6', date: '09.02.2026', items: [
+        'Neue Platzhalter: {{copyright}} und {{untertitel}}',
+        '⚙️ Platzhalter-Panel pro Collection: Autor, Copyright, Untertitel zentral pflegen',
+        'Werte werden beim PDF-Export in alle Seiten eingesetzt',
+        'Autor/Beschreibung aus Info-Bar in eigenes Modal verschoben',
+      ]},
+      { v: '7.5', date: '09.02.2026', items: [
+        'PDF-Export: Platzhalter in bestehenden Seiten werden aufgelöst',
+        'Deckblatt-Modus: {{seitenzahl}} auf Seite 1 bleibt leer',
+        'Konfigurierbare Startnummer für Seitenzählung',
+        'Kein Layout-Eingriff – Seiten bleiben optisch unverändert',
+        'Einstellungen pro Collection gespeichert',
+      ]},
       { v: '7.4', date: '09.02.2026', items: [
         'Zwei-Dropdown-System: Collection wählen → Kapitel erscheint dynamisch',
         'Kapitel-Dropdown zeigt Namen + Seitenzahl, Default: „Einzelseite"',
