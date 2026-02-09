@@ -111,7 +111,7 @@ const CollectionsModule = (() => {
     $('btn-master-css').addEventListener('click', () => { if (!active) return; $('mcss-textarea').value = active.masterCss || ''; $('modal-master-css').style.display = 'flex'; });
     $('mcss-close').addEventListener('click', () => $('modal-master-css').style.display = 'none');
     $('modal-master-css').addEventListener('click', e => { if (e.target.id === 'modal-master-css') e.target.style.display = 'none'; });
-    $('mcss-apply').addEventListener('click', () => { if (!active) return; active.masterCss = $('mcss-textarea').value.trim(); $('modal-master-css').style.display = 'none'; renderPages(); toast('Master CSS aktualisiert', 'success'); });
+    $('mcss-apply').addEventListener('click', () => { if (!active) return; active.masterCss = $('mcss-textarea').value.trim(); $('modal-master-css').style.display = 'none'; renderPages(); autoSave(); toast('Master CSS aktualisiert', 'success'); });
     $('ap-close').addEventListener('click', closeAddPages);
     $('modal-add-pages').addEventListener('click', e => { if (e.target.id === 'modal-add-pages') closeAddPages(); });
     $('modal-page-search').addEventListener('input', e => renderModalPages(e.target.value));
@@ -276,7 +276,7 @@ const CollectionsModule = (() => {
             if (srcItem?.type === 'chapter') srcItem.snippetIds.splice(dragData.sourceIndex, 1);
             targetItem.snippetIds.push(dragData.snippetId);
             dragData = null;
-            renderSidebar(); renderPages();
+            renderSidebar(); renderPages(); autoSave();
             toast('Seite verschoben', 'success');
           }
           return;
@@ -293,7 +293,7 @@ const CollectionsModule = (() => {
         active.items.splice(newIdx, 0, moved);
         selectedIdx = newIdx;
         dragIdx = null;
-        renderSidebar(); renderPages();
+        renderSidebar(); renderPages(); autoSave();
       });
 
       el.addEventListener('dragend', () => {
@@ -447,7 +447,7 @@ const CollectionsModule = (() => {
           const ch = active.items[selectedIdx];
           const [moved] = ch.snippetIds.splice(dragData.sourceIndex, 1);
           ch.snippetIds.splice(tgt, 0, moved);
-          renderPages(); renderSidebar();
+          renderPages(); renderSidebar(); autoSave();
         }
         dragData = null;
       });
@@ -470,7 +470,7 @@ const CollectionsModule = (() => {
     el.querySelectorAll('[data-action="remove"]').forEach(btn => {
       btn.addEventListener('click', () => {
         const ch = active.items[selectedIdx];
-        if (ch?.type === 'chapter') { ch.snippetIds.splice(parseInt(btn.dataset.index), 1); renderPages(); renderSidebar(); }
+        if (ch?.type === 'chapter') { ch.snippetIds.splice(parseInt(btn.dataset.index), 1); renderPages(); renderSidebar(); autoSave(); }
       });
     });
   }
@@ -489,12 +489,25 @@ const CollectionsModule = (() => {
   async function createCollection() {
     const name = prompt('Name der neuen Collection:');
     if (!name) return;
-    const col = await PageForgeDB.saveCollection({
-      name, description: '', author: '', masterCss: '',
-      items: [{ type: 'chapter', name: 'Kapitel 1', snippetIds: [] }]
-    });
-    allCollections.push(col); updateDropdown(); loadCollection(col.id);
-    toast(`"${name}" erstellt`, 'success');
+    try {
+      const col = await PageForgeDB.saveCollection({
+        name, description: '', author: '', masterCss: '',
+        items: [{ type: 'chapter', name: 'Kapitel 1', snippetIds: [] }]
+      });
+      allCollections.push(col); updateDropdown(); loadCollection(col.id);
+      toast(`"${name}" erstellt`, 'success');
+    } catch (e) {
+      console.error('Collection erstellen fehlgeschlagen:', e);
+      toast('Fehler beim Erstellen', 'error');
+    }
+  }
+
+  async function autoSave() {
+    if (!active) return;
+    await PageForgeDB.saveCollection(active);
+    const idx = allCollections.findIndex(c => c.id === active.id);
+    if (idx >= 0) allCollections[idx] = active; else allCollections.push(active);
+    updateDropdown();
   }
 
   async function saveCollection() {
@@ -502,8 +515,8 @@ const CollectionsModule = (() => {
     active.name = $('col-name').value.trim() || 'Unbenannt';
     active.author = $('col-author').value.trim();
     active.description = $('col-desc').value.trim();
-    await PageForgeDB.saveCollection(active);
-    updateDropdown(); renderSidebar();
+    await autoSave();
+    renderSidebar();
     toast('Gespeichert', 'success');
   }
 
@@ -520,7 +533,7 @@ const CollectionsModule = (() => {
     if (!name) return;
     active.items.push({ type: 'chapter', name, snippetIds: [] });
     selectedIdx = active.items.length - 1;
-    renderSidebar(); renderPages();
+    renderSidebar(); renderPages(); autoSave();
   }
 
   function renameItem() {
@@ -529,7 +542,7 @@ const CollectionsModule = (() => {
     if (item.type === 'chapter') {
       const name = prompt('Kapitelname:', item.name);
       if (!name) return;
-      item.name = name; renderSidebar(); renderPages();
+      item.name = name; renderSidebar(); renderPages(); autoSave();
     } else {
       PageForgeDB.get('snippets', item.snippetId).then(s => {
         if (s) PageForgeEvents.emit(PageForgeEvents.EVENTS.SNIPPET_EDIT, s);
@@ -545,7 +558,7 @@ const CollectionsModule = (() => {
     active.items.splice(selectedIdx, 1);
     selectedIdx = Math.min(selectedIdx, Math.max(0, active.items.length - 1));
     if (!active.items.length) active.items.push({ type: 'chapter', name: 'Kapitel 1', snippetIds: [] });
-    renderSidebar(); renderPages();
+    renderSidebar(); renderPages(); autoSave();
   }
 
   // ── Add Pages Modal ──
@@ -602,7 +615,7 @@ const CollectionsModule = (() => {
       const item = active.items[selectedIdx];
       if (item?.type === 'chapter') item.snippetIds.push(...selectedIds);
     }
-    closeAddPages(); renderPages(); renderSidebar();
+    closeAddPages(); renderPages(); renderSidebar(); autoSave();
     toast(`${selectedIds.size} Seiten hinzugefügt`, 'success');
   }
 

@@ -155,8 +155,12 @@ const LibraryModule = (() => {
     const scale = previewHeight / 1123, cardW = Math.round(794 * scale) + 20;
     const listH = Math.max(50, Math.round(previewHeight * 0.8)), listW = Math.round(listH * 794 / 1123), listScale = listH / 1123;
 
-    if (viewMode === 'list') { grid.className = 'lib-list'; grid.style.gridTemplateColumns = ''; }
-    else { grid.className = 'lib-grid'; grid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${cardW}px, 1fr))`; }
+    if (viewMode === 'list') { grid.className = 'lib-list'; grid.style.gridTemplateColumns = ''; grid.style.removeProperty('--card-s'); }
+    else {
+      grid.className = 'lib-grid';
+      grid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${cardW}px, 1fr))`;
+      grid.style.setProperty('--card-s', Math.min(2, Math.max(1, previewHeight / 250)).toFixed(2));
+    }
 
     grid.innerHTML = items.map(s => {
       const cat = allCategories.find(c => c.id === s.category);
