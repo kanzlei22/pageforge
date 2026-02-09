@@ -247,6 +247,13 @@ const PageForge = (() => {
     if (!btn || !modal) return;
 
     const versions = [
+      { v: '8.1', date: '09.02.2026', items: [
+        'Bild-Referenzen: pf://alias statt riesiger Base64-Strings im HTML',
+        'Jedes Bild bekommt automatisch einen Alias (aus Dateiname)',
+        'Alias umbennbar über ✏️ im Bild-Manager',
+        'pf://-Referenzen werden in Preview, Print und PDF-Export aufgelöst',
+        'Im Prompt nur noch &lt;img src="pf://logo"&gt; nötig',
+      ]},
       { v: '8.0', date: '09.02.2026', items: [
         '⭐ Favoriten: Seiten als Favorit markieren, Filter für nur Favoriten',
         '📖 Inhaltsverzeichnis: Auto-generiert aus Kapiteln + Seitentiteln (3 CSS-Stile)',

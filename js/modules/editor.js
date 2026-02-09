@@ -123,7 +123,11 @@ const EditorModule = (() => {
         <!-- Image Manager Modal -->
         <div class="modal-backdrop" id="modal-images" style="display:none">
           <div class="modal-content modal-lg">
-            <div class="modal-header"><h3>🖼️ Bilder</h3><button class="modal-close" id="img-modal-close">✕</button></div>
+            <div class="modal-header">
+              <h3>🖼️ Bilder</h3>
+              <button class="tb2 tb2-outline tb2-sm" id="btn-img-prompt" title="Bildliste für AI-Prompt kopieren">📋 Für Prompt</button>
+              <button class="modal-close" id="img-modal-close">✕</button>
+            </div>
             <div class="modal-body">
               <div class="img-upload-zone" id="img-upload-zone">
                 <span>📁 Bilder hierher ziehen oder <label class="img-upload-label">klicken<input type="file" id="img-file-input" accept="image/*" multiple hidden /></label></span>
@@ -175,6 +179,7 @@ const EditorModule = (() => {
     $('img-modal-close').addEventListener('click', () => $('modal-images').style.display = 'none');
     $('modal-images').addEventListener('click', e => { if (e.target.id === 'modal-images') e.target.style.display = 'none'; });
     $('img-file-input').addEventListener('change', handleImageUpload);
+    $('btn-img-prompt').addEventListener('click', copyImageListForPrompt);
     setupImageDrop();
 
     $('btn-placeholders').addEventListener('click', togglePlaceholderPicker);
@@ -417,6 +422,31 @@ const EditorModule = (() => {
     await refreshImageGallery();
   }
 
+  async function copyImageListForPrompt() {
+    const images = await PageForgeDB.getAll('images');
+    if (!images.length) { toast('Keine Bilder vorhanden', 'warning'); return; }
+
+    const lines = images.map(img => {
+      const alias = (img.alias || img.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '-')).toLowerCase();
+      const ext = (img.mimeType || '').split('/')[1]?.toUpperCase() || '?';
+      const size = formatSize(img.size);
+      return `  pf://${alias}  (${ext}, ${size})`;
+    });
+
+    const text = `Verfügbare Bilder in PageForge (verwende als src="pf://alias"):
+${lines.join('\n')}
+
+Beispiel: <img src="pf://${(images[0].alias || 'bild').toLowerCase()}" alt="" style="max-width:100%;" />`;
+
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Bildliste kopiert – in Prompt einfügen', 'success');
+    } catch (e) {
+      // Fallback: show in prompt
+      prompt('Bildliste für Prompt:', text);
+    }
+  }
+
   async function refreshImageGallery() {
     const images = await PageForgeDB.getAll('images');
     const gallery = $('img-gallery');
@@ -424,26 +454,27 @@ const EditorModule = (() => {
       gallery.innerHTML = '<div class="img-empty">Noch keine Bilder hochgeladen</div>';
       return;
     }
-    gallery.innerHTML = images.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(img => `
+    gallery.innerHTML = images.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(img => {
+      const alias = img.alias || img.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
+      return `
       <div class="img-card" data-id="${img.id}">
         <img src="${img.dataUrl}" alt="${esc(img.name)}" class="img-thumb" />
         <div class="img-card-info">
-          <span class="img-card-name">${esc(img.name)}</span>
-          <span class="img-card-size">${formatSize(img.size)}</span>
+          <code class="img-alias" title="Für HTML: pf://${esc(alias)}">pf://${esc(alias)}</code>
+          <span class="img-card-name">${esc(img.name)} · ${formatSize(img.size)}</span>
         </div>
         <div class="img-card-acts">
-          <button class="tb2 tb2-primary tb2-sm img-insert-btn" data-id="${img.id}" title="In Code einfügen">Einfügen</button>
+          <button class="tb2 tb2-primary tb2-sm img-insert-btn" data-id="${img.id}" data-alias="${esc(alias)}" title="Kurz-Referenz einfügen">📎 Einfügen</button>
+          <button class="tb2 tb2-ghost tb2-sm img-rename-btn" data-id="${img.id}" title="Alias ändern">✏️</button>
           <button class="tb2 tb2-ghost tb2-sm img-del-btn" data-id="${img.id}" title="Löschen">🗑️</button>
         </div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
 
     gallery.querySelectorAll('.img-insert-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const img = await PageForgeDB.get('images', btn.dataset.id);
-        if (!img) return;
-        const tag = `<img src="${img.dataUrl}" alt="${img.name}" style="max-width:100%;" />`;
-        // Insert into code textarea
+        const alias = btn.dataset.alias;
+        const tag = `<img src="pf://${alias}" alt="${alias}" style="max-width:100%;" />`;
         const ta = $('code-textarea');
         if (codeDrawerOpen) {
           const pos = ta.selectionStart;
@@ -453,7 +484,21 @@ const EditorModule = (() => {
         } else {
           navigator.clipboard.writeText(tag);
         }
-        toast(codeDrawerOpen ? 'Bild eingefügt' : 'IMG-Tag kopiert', 'success');
+        toast(codeDrawerOpen ? 'pf://' + alias + ' eingefügt' : 'IMG-Tag kopiert', 'success');
+      });
+    });
+
+    gallery.querySelectorAll('.img-rename-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const img = await PageForgeDB.get('images', btn.dataset.id);
+        if (!img) return;
+        const newAlias = prompt('Bild-Alias (für pf://...):', img.alias || '');
+        if (!newAlias) return;
+        img.alias = newAlias.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
+        await PageForgeDB.put('images', img);
+        await refreshImageGallery();
+        await loadImageMap();
+        toast(`Alias: pf://${img.alias}`, 'success');
       });
     });
 
@@ -462,6 +507,7 @@ const EditorModule = (() => {
         if (!confirm('Bild löschen?')) return;
         await PageForgeDB.remove('images', btn.dataset.id);
         await refreshImageGallery();
+        await loadImageMap();
         toast('Gelöscht', 'info');
       });
     });
@@ -488,12 +534,14 @@ const EditorModule = (() => {
     const reader = new FileReader();
     reader.onload = async () => {
       const id = 'img_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+      const alias = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
       await PageForgeDB.put('images', {
-        id, name: file.name, dataUrl: reader.result,
+        id, name: file.name, alias, dataUrl: reader.result,
         mimeType: file.type, size: file.size, createdAt: new Date().toISOString()
       });
       await refreshImageGallery();
-      toast(`"${file.name}" hochgeladen`, 'success');
+        toast(`"${file.name}" → pf://${alias}`, 'success');
+        await loadImageMap();
     };
     reader.readAsDataURL(file);
   }
@@ -534,11 +582,18 @@ const EditorModule = (() => {
 
   // ── Rendering ──
 
-  function renderPreview() {
+  let imageMap = {};
+
+  async function loadImageMap() {
+    imageMap = await PageForgePlaceholders.buildImageMap();
+  }
+
+  async function renderPreview() {
     if (!currentSnippet?.htmlContent) return;
-    // Highlight placeholders in preview
-    const highlighted = PageForgePlaceholders.highlight(currentSnippet.htmlContent);
-    renderToFrame($('preview-frame'), highlighted);
+    if (!Object.keys(imageMap).length) await loadImageMap();
+    let html = PageForgePlaceholders.resolveImages(currentSnippet.htmlContent, imageMap);
+    html = PageForgePlaceholders.highlight(html);
+    renderToFrame($('preview-frame'), html);
   }
 
   function renderToFrame(frame, html) {
@@ -562,7 +617,8 @@ const EditorModule = (() => {
     if (!currentSnippet?.htmlContent) { toast('Nichts zum Drucken', 'warning'); return; }
     const w = window.open('', '_blank', 'width=800,height=1100');
     if (!w) { toast('Popup blockiert', 'error'); return; }
-    w.document.write(currentSnippet.htmlContent);
+    const html = PageForgePlaceholders.resolveImages(currentSnippet.htmlContent, imageMap);
+    w.document.write(html);
     w.document.close();
     w.onload = () => setTimeout(() => { w.focus(); w.print(); }, 300);
   }

@@ -795,6 +795,7 @@ const CollectionsModule = (() => {
     toast('PDF wird vorbereitet…', 'info');
     const s = getPdfSettings();
     const datum = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const imgMap = await PageForgePlaceholders.buildImageMap();
 
     // Pass 1: Build page list with metadata
     let entries = []; // {type, snippet?, chapterName?, chapterNr?, itemIdx?, pageIdx?}
@@ -858,7 +859,7 @@ ${active.masterCss ? `.pf-page{${active.masterCss}}` : ''}
     if (isCoverFirst && entries.length) {
       const e = entries[0];
       if (e.type === 'page') {
-        html += buildContentPage(e.snippet, e, gpIdx, '', String(displayTotal), s, datum);
+        html += buildContentPage(e.snippet, e, gpIdx, '', String(displayTotal), s, datum, imgMap);
       }
       gpIdx++; entryIdx = 1;
     }
@@ -875,7 +876,7 @@ ${active.masterCss ? `.pf-page{${active.masterCss}}` : ''}
       if (e.type === 'chapter-cover') {
         html += generateChapterCoverPage(e, s.ccStyle, String(e.displayNr), String(displayTotal), datum);
       } else {
-        html += buildContentPage(e.snippet, e, gpIdx, String(e.displayNr), String(displayTotal), s, datum);
+        html += buildContentPage(e.snippet, e, gpIdx, String(e.displayNr), String(displayTotal), s, datum, imgMap);
       }
       gpIdx++;
     }
@@ -887,7 +888,7 @@ ${active.masterCss ? `.pf-page{${active.masterCss}}` : ''}
     w.onload = () => setTimeout(() => { w.focus(); w.print(); }, 500);
   }
 
-  function buildContentPage(snippet, entry, gpIdx, pageNr, displayTotal, s, datum) {
+  function buildContentPage(snippet, entry, gpIdx, pageNr, displayTotal, s, datum, imgMap) {
     const vars = {
       collection: active?.name || '',
       untertitel: active?.untertitel || '',
@@ -901,6 +902,7 @@ ${active.masterCss ? `.pf-page{${active.masterCss}}` : ''}
       datum,
     };
     let raw = PageForgePlaceholders.resolve(snippet.htmlContent || '', vars);
+    raw = PageForgePlaceholders.resolveImages(raw, imgMap);
     const sid = `pf-s${gpIdx}`;
     const p = new DOMParser(), doc = p.parseFromString(raw, 'text/html');
     const css = Array.from(doc.querySelectorAll('style')).map(e => e.textContent).join('\n');

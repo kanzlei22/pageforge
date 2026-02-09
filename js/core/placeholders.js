@@ -70,5 +70,32 @@ const PageForgePlaceholders = (() => {
     };
   }
 
-  return { PLACEHOLDERS, resolve, highlight, buildCollectionVars };
+  /**
+   * Resolve pf://alias image references to base64 data URLs
+   * @param {string} html
+   * @param {object} imageMap - { alias: dataUrl }
+   * @returns {string} HTML with resolved image sources
+   */
+  function resolveImages(html, imageMap) {
+    if (!html || !imageMap) return html;
+    return html.replace(/pf:\/\/([a-zA-Z0-9_-]+)/g, (match, alias) => {
+      return imageMap[alias.toLowerCase()] || match;
+    });
+  }
+
+  /**
+   * Build image map from IndexedDB
+   * @returns {Promise<object>} { alias: dataUrl }
+   */
+  async function buildImageMap() {
+    const images = await PageForgeDB.getAll('images');
+    const map = {};
+    images.forEach(img => {
+      const alias = (img.alias || img.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '-')).toLowerCase();
+      map[alias] = img.dataUrl;
+    });
+    return map;
+  }
+
+  return { PLACEHOLDERS, resolve, highlight, buildCollectionVars, resolveImages, buildImageMap };
 })();
