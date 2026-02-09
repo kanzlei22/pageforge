@@ -247,6 +247,13 @@ const PageForge = (() => {
     if (!btn || !modal) return;
 
     const versions = [
+      { v: '8.2', date: '09.02.2026', items: [
+        '🎨 Grid View "Atelier": Seiten schweben als weiße Drucke auf dunklem Hintergrund',
+        'Hover-Overlay mit Glaseffekt: Titel, Status-Punkt, Datum, Aktionen',
+        'Sanftes Lift-Up bei Hover (translateY + Shadow)',
+        'Kein sichtbarer Rahmen, keine Meta-Info im Ruhezustand',
+        'Favoriten-Stern und Checkbox über dem Overlay',
+      ]},
       { v: '8.1', date: '09.02.2026', items: [
         'Bild-Referenzen: pf://alias statt riesiger Base64-Strings im HTML',
         'Jedes Bild bekommt automatisch einen Alias (aus Dateiname)',

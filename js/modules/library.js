@@ -35,7 +35,7 @@ const LibraryModule = (() => {
               <span class="search-x" id="lib-search-x" style="display:none">✕</span>
             </div>
             <div class="lib-size-ctrl"><span class="meta-dim">Größe</span>
-              <input type="range" id="lib-preview-size" min="120" max="350" value="250" class="size-slider" />
+              <input type="range" id="lib-preview-size" min="80" max="600" value="250" class="size-slider" />
             </div>
             <div class="view-toggle">
               <button class="vbtn active" data-v="grid" title="Raster">⊞</button>
@@ -210,21 +210,20 @@ const LibraryModule = (() => {
     $('lib-count').textContent = `${items.length} von ${allSnippets.length}`;
 
     if (!items.length) {
-      grid.className = 'lib-grid'; grid.style.gridTemplateColumns = '';
+      grid.className = 'lib-grid'; grid.style.cssText = '';
       grid.innerHTML = `<div class="lib-empty"><div class="lib-empty-ico">${allSnippets.length ? '🔍' : '📄'}</div>
         <p class="lib-empty-t">${allSnippets.length ? 'Keine Treffer' : 'Noch keine Seiten'}</p></div>`;
       return;
     }
 
     const stMap = { draft: '⏳ Entwurf', review: '🔍 Review', final: '✅ Final' };
-    const scale = previewHeight / 1123, cardW = Math.round(794 * scale) + 20;
+    const scale = previewHeight / 1123, cardW = Math.round(794 * scale);
     const listH = Math.max(50, Math.round(previewHeight * 0.8)), listW = Math.round(listH * 794 / 1123), listScale = listH / 1123;
 
-    if (viewMode === 'list') { grid.className = 'lib-list'; grid.style.gridTemplateColumns = ''; grid.style.removeProperty('--card-s'); }
+    if (viewMode === 'list') { grid.className = 'lib-list'; grid.style.cssText = ''; }
     else {
       grid.className = 'lib-grid';
-      grid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${cardW}px, 1fr))`;
-      grid.style.setProperty('--card-s', Math.min(2, Math.max(1, previewHeight / 250)).toFixed(2));
+      grid.style.cssText = `--card-w:${cardW}px;--card-h:${previewHeight}px`;
     }
     grid.innerHTML = items.map(s => {
       const cat = allCategories.find(c => c.id === s.category);
@@ -246,12 +245,21 @@ const LibraryModule = (() => {
       return `<div class="lib-card${selected.has(s.id) ? ' lib-selected' : ''}" data-id="${s.id}">
         <input type="checkbox" class="lib-chk lib-chk-grid" data-id="${s.id}" ${selected.has(s.id) ? 'checked' : ''} />
         <button class="fav-star${s.favorite ? ' fav-on' : ''}" data-id="${s.id}" title="Favorit">${s.favorite ? '★' : '☆'}</button>
-        <div class="lc-preview-wrap" data-id="${s.id}" style="height:${previewHeight}px"></div>
-        <div class="lc-body"><div class="lc-title">${esc(s.title)}</div>
-          <div class="lc-meta">${cat ? `<span>${cat.icon} ${cat.name}</span>` : ''}<span class="status-badge sb-${s.status}">${stMap[s.status] || ''}</span></div>
-          ${cols.length ? `<div class="lc-cols">${colBadges}</div>` : ''}
-          <div class="lc-foot"><span class="meta-dim">${date} · v${s.version || 1}</span>
-            <div class="lc-acts"><button class="abtn a-dup" data-id="${s.id}">📋</button><button class="abtn a-del" data-id="${s.id}">🗑️</button></div></div></div>
+        <div class="lc-preview-wrap" data-id="${s.id}"></div>
+        <div class="lc-overlay">
+          <div class="lc-overlay-top">
+            <span class="lc-title">${esc(s.title)}</span>
+            ${cat ? `<span class="lc-cat">${cat.icon}</span>` : ''}
+          </div>
+          <div class="lc-overlay-bottom">
+            <span class="status-pip sb-${s.status}"></span>
+            <span class="lc-date">${date}</span>
+            ${cols.length ? `<span class="lc-col-dot" title="${cols.map(c=>esc(c.name)).join(', ')}">📑</span>` : ''}
+            <span class="lc-spacer"></span>
+            <button class="lc-act a-dup" data-id="${s.id}" title="Duplizieren">📋</button>
+            <button class="lc-act a-del" data-id="${s.id}" title="Löschen">🗑️</button>
+          </div>
+        </div>
       </div>`;
     }).join('');
 
@@ -313,7 +321,7 @@ const LibraryModule = (() => {
       });
     });
     grid.querySelectorAll('.lib-card,.lib-list-item').forEach(el => {
-      el.addEventListener('click', async e => { if (e.target.closest('.abtn') || e.target.closest('.lib-chk')) return;
+      el.addEventListener('click', async e => { if (e.target.closest('.abtn') || e.target.closest('.lc-act') || e.target.closest('.lib-chk') || e.target.closest('.fav-star')) return;
         const s = await PageForgeDB.get('snippets', el.dataset.id);
         if (s) PageForgeEvents.emit(PageForgeEvents.EVENTS.SNIPPET_EDIT, s);
       });
