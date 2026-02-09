@@ -8,7 +8,7 @@
 const LibraryModule = (() => {
   let allSnippets = [], allCategories = [], allTags = [];
   let collectionMap = {}; // snippetId → [{name, id}]
-  let filters = { query: '', category: '', status: '', tag: '', sort: 'date-desc' };
+  let filters = { query: '', category: '', status: '', tag: '', sort: 'date-desc', favOnly: false };
   let viewMode = 'grid';
   let previewHeight = 250;
   let selected = new Set();
@@ -53,6 +53,7 @@ const LibraryModule = (() => {
               <option value="title-desc">🔤 Z → A</option>
               <option value="category">📁 Kategorie</option>
             </select>
+            <button class="fav-filter-btn" id="btn-fav-filter" title="Nur Favoriten anzeigen">☆</button>
             <span class="lib-count" id="lib-count"></span>
           </div>
           <div class="lib-tagcloud" id="lib-tagcloud"></div>
@@ -75,6 +76,12 @@ const LibraryModule = (() => {
     $('lf-cat').addEventListener('change', e => { filters.category = e.target.value; render(); });
     $('lf-status').addEventListener('change', e => { filters.status = e.target.value; render(); });
     $('lf-sort').addEventListener('change', e => { filters.sort = e.target.value; render(); });
+    $('btn-fav-filter').addEventListener('click', () => {
+      filters.favOnly = !filters.favOnly;
+      $('btn-fav-filter').textContent = filters.favOnly ? '★' : '☆';
+      $('btn-fav-filter').classList.toggle('fav-active', filters.favOnly);
+      render();
+    });
     document.querySelectorAll('.vbtn').forEach(b => b.addEventListener('click', () => {
       document.querySelectorAll('.vbtn').forEach(x => x.classList.remove('active'));
       b.classList.add('active'); viewMode = b.dataset.v; render();
@@ -181,7 +188,8 @@ const LibraryModule = (() => {
       return (!q || s.title?.toLowerCase().includes(q) || s.tags?.some(t => t.toLowerCase().includes(q)) || s.htmlContent?.toLowerCase().includes(q))
         && (!filters.category || s.category === filters.category)
         && (!filters.status || s.status === filters.status)
-        && (!filters.tag || s.tags?.includes(filters.tag));
+        && (!filters.tag || s.tags?.includes(filters.tag))
+        && (!filters.favOnly || s.favorite);
     }).sort((a, b) => {
       switch (filters.sort) {
         case 'date-asc': return new Date(a.updatedAt) - new Date(b.updatedAt);
@@ -232,11 +240,12 @@ const LibraryModule = (() => {
               <span class="status-badge sb-${s.status}">${stMap[s.status] || ''}</span>
               <span class="meta-dim">${date} · v${s.version || 1}</span>${colBadges}</div>
             <div class="lli-tags">${(s.tags || []).map(t => `<span class="tag-chip">${esc(t)}</span>`).join('')}</div></div>
-          <div class="lli-acts"><button class="abtn a-edit" data-id="${s.id}">✏️</button><button class="abtn a-dup" data-id="${s.id}">📋</button><button class="abtn a-del" data-id="${s.id}">🗑️</button></div>
+          <div class="lli-acts"><button class="fav-star${s.favorite ? ' fav-on' : ''}" data-id="${s.id}" title="Favorit">${s.favorite ? '★' : '☆'}</button><button class="abtn a-edit" data-id="${s.id}">✏️</button><button class="abtn a-dup" data-id="${s.id}">📋</button><button class="abtn a-del" data-id="${s.id}">🗑️</button></div>
         </div>`;
       }
       return `<div class="lib-card${selected.has(s.id) ? ' lib-selected' : ''}" data-id="${s.id}">
         <input type="checkbox" class="lib-chk lib-chk-grid" data-id="${s.id}" ${selected.has(s.id) ? 'checked' : ''} />
+        <button class="fav-star${s.favorite ? ' fav-on' : ''}" data-id="${s.id}" title="Favorit">${s.favorite ? '★' : '☆'}</button>
         <div class="lc-preview-wrap" data-id="${s.id}" style="height:${previewHeight}px"></div>
         <div class="lc-body"><div class="lc-title">${esc(s.title)}</div>
           <div class="lc-meta">${cat ? `<span>${cat.icon} ${cat.name}</span>` : ''}<span class="status-badge sb-${s.status}">${stMap[s.status] || ''}</span></div>
@@ -325,6 +334,14 @@ const LibraryModule = (() => {
       await PageForgeDB.remove('snippets', s.id); refresh();
       PageForgeEvents.emit(PageForgeEvents.EVENTS.SNIPPET_DELETED, { id: s.id });
       PageForgeEvents.emit(PageForgeEvents.EVENTS.TOAST, { message: 'Gelöscht', type: 'info' });
+    }));
+    grid.querySelectorAll('.fav-star').forEach(b => b.addEventListener('click', async e => {
+      e.stopPropagation(); const s = await PageForgeDB.get('snippets', b.dataset.id); if (!s) return;
+      s.favorite = !s.favorite; await PageForgeDB.saveSnippet(s);
+      b.textContent = s.favorite ? '★' : '☆';
+      b.classList.toggle('fav-on', s.favorite);
+      const idx = allSnippets.findIndex(x => x.id === s.id);
+      if (idx >= 0) allSnippets[idx].favorite = s.favorite;
     }));
   }
 

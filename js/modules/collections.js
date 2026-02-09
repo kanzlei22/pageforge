@@ -92,7 +92,7 @@ const CollectionsModule = (() => {
 
             <!-- PDF Export Modal -->
             <div class="modal-backdrop" id="modal-pdf-export" style="display:none">
-              <div class="modal-content" style="max-width:520px">
+              <div class="modal-content" style="max-width:560px">
                 <div class="modal-header"><h3>🖨️ PDF-Export</h3><button class="modal-close" id="pdf-modal-close">✕</button></div>
                 <div class="modal-body">
 
@@ -107,6 +107,32 @@ const CollectionsModule = (() => {
                     <div style="display:flex;gap:8px;align-items:center">
                       <input type="number" id="pdf-start-nr" value="1" min="1" max="999" class="pdf-num" style="width:70px" />
                       <span class="meta-dim">Seitennummerierung beginnt bei diesem Wert</span>
+                    </div>
+                  </div>
+
+                  <div class="pdf-section">
+                    <label class="pdf-label">
+                      <input type="checkbox" id="pdf-toc" /> Inhaltsverzeichnis einfügen
+                    </label>
+                    <div class="pdf-sub" id="pdf-toc-opts" style="display:none">
+                      <select id="pdf-toc-style" class="fsel" style="width:100%">
+                        <option value="classic">📖 Klassisch – Linien + Seitenzahlen</option>
+                        <option value="modern">🎨 Modern – Farbblöcke, serifenlos</option>
+                        <option value="minimal">✨ Minimal – Nur Text, viel Weißraum</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="pdf-section">
+                    <label class="pdf-label">
+                      <input type="checkbox" id="pdf-chapter-covers" /> Kapitel-Deckblätter einfügen
+                    </label>
+                    <div class="pdf-sub" id="pdf-cc-opts" style="display:none">
+                      <select id="pdf-cc-style" class="fsel" style="width:100%">
+                        <option value="bold">🔷 Bold – Großer Titel, Farbe</option>
+                        <option value="elegant">📜 Elegant – Zentriert, Linie</option>
+                        <option value="stripe">🟧 Stripe – Seitlicher Farbbalken</option>
+                      </select>
                     </div>
                   </div>
 
@@ -186,6 +212,8 @@ const CollectionsModule = (() => {
     $('pdf-modal-close').addEventListener('click', () => $('modal-pdf-export').style.display = 'none');
     $('modal-pdf-export').addEventListener('click', e => { if (e.target.id === 'modal-pdf-export') e.target.style.display = 'none'; });
     $('btn-pdf-go').addEventListener('click', () => { savePdfSettings(); $('modal-pdf-export').style.display = 'none'; exportPdf(); });
+    $('pdf-toc').addEventListener('change', () => $('pdf-toc-opts').style.display = $('pdf-toc').checked ? '' : 'none');
+    $('pdf-chapter-covers').addEventListener('change', () => $('pdf-cc-opts').style.display = $('pdf-chapter-covers').checked ? '' : 'none');
     $('btn-add-pages').addEventListener('click', openAddPages);
     $('btn-rename-item').addEventListener('click', renameItem);
     $('btn-del-item').addEventListener('click', deleteItem);
@@ -729,6 +757,10 @@ const CollectionsModule = (() => {
     return {
       cover: $('pdf-cover')?.checked || false,
       startNr: parseInt($('pdf-start-nr')?.value) || 1,
+      toc: $('pdf-toc')?.checked || false,
+      tocStyle: $('pdf-toc-style')?.value || 'classic',
+      chapterCovers: $('pdf-chapter-covers')?.checked || false,
+      ccStyle: $('pdf-cc-style')?.value || 'bold',
     };
   }
 
@@ -737,6 +769,12 @@ const CollectionsModule = (() => {
     if (!s) return;
     $('pdf-cover').checked = !!s.cover;
     if (s.startNr) $('pdf-start-nr').value = s.startNr;
+    $('pdf-toc').checked = !!s.toc;
+    $('pdf-toc-opts').style.display = s.toc ? '' : 'none';
+    if (s.tocStyle) $('pdf-toc-style').value = s.tocStyle;
+    $('pdf-chapter-covers').checked = !!s.chapterCovers;
+    $('pdf-cc-opts').style.display = s.chapterCovers ? '' : 'none';
+    if (s.ccStyle) $('pdf-cc-style').value = s.ccStyle;
   }
 
   async function savePdfSettings() {
@@ -752,35 +790,94 @@ const CollectionsModule = (() => {
 
   async function exportPdf() {
     if (!active) return;
-    const totalPages = countAllPages(active);
-    if (!totalPages) { toast('Collection ist leer', 'warning'); return; }
+    const rawTotal = countAllPages(active);
+    if (!rawTotal) { toast('Collection ist leer', 'warning'); return; }
     toast('PDF wird vorbereitet…', 'info');
-
     const s = getPdfSettings();
-    const displayTotal = s.cover ? totalPages - 1 : totalPages;
+    const datum = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
+    // Pass 1: Build page list with metadata
+    let entries = []; // {type, snippet?, chapterName?, chapterNr?, itemIdx?, pageIdx?}
+    let chNr = 0;
+    for (let ii = 0; ii < active.items.length; ii++) {
+      const item = active.items[ii];
+      if (item.type === 'chapter') {
+        chNr++;
+        if (s.chapterCovers) entries.push({ type: 'chapter-cover', chapterName: item.name, chapterNr: chNr });
+        for (let si = 0; si < (item.snippetIds?.length || 0); si++) {
+          const sn = await PageForgeDB.get('snippets', item.snippetIds[si]);
+          if (sn) entries.push({ type: 'page', snippet: sn, chapterName: item.name, chapterNr: chNr, itemIdx: ii, pageIdx: si });
+        }
+      } else {
+        const sn = await PageForgeDB.get('snippets', item.snippetId);
+        if (sn) entries.push({ type: 'page', snippet: sn, chapterName: '', chapterNr: 0, itemIdx: ii, pageIdx: 0 });
+      }
+    }
+
+    // Calculate numbering
+    const tocPages = s.toc ? 1 : 0;
+    const numberedTotal = tocPages + entries.length;
+    const displayTotal = s.cover ? numberedTotal - 1 : numberedTotal;
+
+    // Assign page numbers
+    let nr = s.startNr;
+    const isCoverFirst = s.cover;
+    let tocPageNr = 0;
+
+    // TOC data (need page numbers before building)
+    const tocData = [];
+    let tempNr = s.startNr;
+    if (isCoverFirst) { /* cover = page 0, not numbered */ }
+    if (s.toc) { tocPageNr = isCoverFirst ? tempNr : tempNr; tempNr++; }
+    for (const e of entries) {
+      e.displayNr = tempNr;
+      if (e.type === 'chapter-cover') tocData.push({ title: e.chapterName, pageNr: tempNr, isChapter: true });
+      else tocData.push({ title: e.snippet.title, pageNr: tempNr, isChapter: false });
+      tempNr++;
+    }
+
+    // Build HTML
     let html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>@page{size:A4;margin:0}*,*::before,*::after{box-sizing:border-box}
 html,body{margin:0;padding:0;width:210mm}
 .pf-page{width:210mm;min-height:297mm;page-break-after:always;overflow:hidden;position:relative}
 .pf-page:last-child{page-break-after:auto}
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=Open+Sans:wght@400;600&display=swap');
 ${active.masterCss ? `.pf-page{${active.masterCss}}` : ''}
 </style></head><body>`;
 
-    let gp = 0;
-    for (let ii = 0; ii < active.items.length; ii++) {
-      const item = active.items[ii];
-      if (item.type === 'page') {
-        const sn = await PageForgeDB.get('snippets', item.snippetId);
-        if (sn) html += buildPdfPage(sn, ii, 0, gp, totalPages, displayTotal, s);
-        gp++;
-      } else {
-        for (let si = 0; si < (item.snippetIds?.length || 0); si++) {
-          const sn = await PageForgeDB.get('snippets', item.snippetIds[si]);
-          if (sn) html += buildPdfPage(sn, ii, si, gp, totalPages, displayTotal, s);
-          gp++;
-        }
+    let gpIdx = 0;
+
+    // Render pages in order
+    // If cover: first content page is cover (no number)
+    // Then TOC if enabled
+    // Then entries
+
+    // We need to handle cover: the FIRST entry is the cover page
+    let entryIdx = 0;
+    if (isCoverFirst && entries.length) {
+      const e = entries[0];
+      if (e.type === 'page') {
+        html += buildContentPage(e.snippet, e, gpIdx, '', String(displayTotal), s, datum);
       }
+      gpIdx++; entryIdx = 1;
+    }
+
+    // TOC
+    if (s.toc) {
+      html += generateTocPage(tocData, s.tocStyle, String(tocPageNr), String(displayTotal), datum);
+      gpIdx++;
+    }
+
+    // Rest of entries
+    for (let i = entryIdx; i < entries.length; i++) {
+      const e = entries[i];
+      if (e.type === 'chapter-cover') {
+        html += generateChapterCoverPage(e, s.ccStyle, String(e.displayNr), String(displayTotal), datum);
+      } else {
+        html += buildContentPage(e.snippet, e, gpIdx, String(e.displayNr), String(displayTotal), s, datum);
+      }
+      gpIdx++;
     }
 
     html += '</body></html>';
@@ -790,24 +887,138 @@ ${active.masterCss ? `.pf-page{${active.masterCss}}` : ''}
     w.onload = () => setTimeout(() => { w.focus(); w.print(); }, 500);
   }
 
-  function buildPdfPage(snippet, itemIdx, pageIdx, gp, totalPages, displayTotal, s) {
-    const isCover = s.cover && gp === 0;
-    // Page number: cover page gets empty string, rest counts from startNr
-    const pageNr = isCover ? '' : String(s.startNr + (s.cover ? gp - 1 : gp));
-
-    const vars = buildVars(itemIdx, pageIdx, totalPages);
-    vars.seitentitel = snippet.title || '';
-    vars.seitenzahl = pageNr;
-    vars.gesamtseiten = String(displayTotal);
-
+  function buildContentPage(snippet, entry, gpIdx, pageNr, displayTotal, s, datum) {
+    const vars = {
+      collection: active?.name || '',
+      untertitel: active?.untertitel || '',
+      kapitel: entry.chapterName || '',
+      kapitelnr: String(entry.chapterNr || ''),
+      seitenzahl: pageNr,
+      gesamtseiten: displayTotal,
+      autor: active?.author || '',
+      copyright: active?.copyright || '',
+      seitentitel: snippet.title || '',
+      datum,
+    };
     let raw = PageForgePlaceholders.resolve(snippet.htmlContent || '', vars);
-    const sid = `pf-s${gp}`;
+    const sid = `pf-s${gpIdx}`;
     const p = new DOMParser(), doc = p.parseFromString(raw, 'text/html');
     const css = Array.from(doc.querySelectorAll('style')).map(e => e.textContent).join('\n');
     const scoped = scopeCssViaCSSOM(css, `#${sid}`);
     const body = doc.body ? doc.body.innerHTML : raw;
     const bs = doc.body?.getAttribute('style') || '', bc = doc.body?.getAttribute('class') || '';
     return `<div class="pf-page ${bc}" id="${sid}" style="${esc(bs)}"><style>${scoped}</style>${body}</div>`;
+  }
+
+  // ── TOC Generator ──
+
+  function generateTocPage(tocData, style, pageNr, total, datum) {
+    const colName = active?.name || '';
+    const copyright = active?.copyright || '';
+    const styles = {
+      classic: `
+        .toc-page{font-family:'Open Sans',sans-serif;padding:50px 60px;color:#222}
+        .toc-title{font-family:'Montserrat',sans-serif;font-size:28px;font-weight:700;margin-bottom:8px;color:#003366}
+        .toc-sub{font-size:12px;color:#888;margin-bottom:40px;padding-bottom:16px;border-bottom:2px solid #003366}
+        .toc-chapter{font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;color:#003366;margin:20px 0 6px;text-transform:uppercase;letter-spacing:0.5px}
+        .toc-entry{display:flex;align-items:baseline;padding:5px 0;font-size:12px;border-bottom:1px dotted #ccc}
+        .toc-entry-title{flex:1}
+        .toc-entry-nr{font-weight:600;color:#003366;min-width:30px;text-align:right}
+        .toc-footer{position:absolute;bottom:30px;left:60px;right:60px;font-size:8px;color:#999;display:flex;justify-content:space-between;border-top:1px solid #e0e0e0;padding-top:6px}
+      `,
+      modern: `
+        .toc-page{font-family:'Open Sans',sans-serif;padding:50px 55px;color:#333}
+        .toc-title{font-family:'Montserrat',sans-serif;font-size:32px;font-weight:700;color:#fff;background:#003366;margin:-50px -55px 30px;padding:50px 55px 30px}
+        .toc-sub{font-size:11px;color:rgba(255,255,255,0.7);margin-top:6px}
+        .toc-chapter{font-family:'Montserrat',sans-serif;font-size:11px;font-weight:700;color:#fff;background:#B87333;padding:6px 14px;margin:18px 0 8px;border-radius:4px;text-transform:uppercase;letter-spacing:1px}
+        .toc-entry{display:flex;align-items:baseline;padding:7px 0;font-size:12px}
+        .toc-entry-title{flex:1}
+        .toc-entry-nr{font-weight:700;color:#B87333;font-size:14px;min-width:30px;text-align:right}
+        .toc-footer{position:absolute;bottom:30px;left:55px;right:55px;font-size:8px;color:#999;display:flex;justify-content:space-between}
+      `,
+      minimal: `
+        .toc-page{font-family:'Open Sans',sans-serif;padding:80px 70px;color:#333}
+        .toc-title{font-family:'Montserrat',sans-serif;font-size:22px;font-weight:400;color:#333;margin-bottom:50px;letter-spacing:2px;text-transform:uppercase}
+        .toc-sub{display:none}
+        .toc-chapter{font-size:10px;font-weight:600;color:#999;margin:30px 0 8px;text-transform:uppercase;letter-spacing:2px}
+        .toc-entry{display:flex;align-items:baseline;padding:6px 0;font-size:13px}
+        .toc-entry-title{flex:1;color:#333}
+        .toc-entry-nr{color:#999;font-size:12px;min-width:30px;text-align:right}
+        .toc-footer{position:absolute;bottom:50px;left:70px;right:70px;font-size:8px;color:#bbb;display:flex;justify-content:space-between}
+      `,
+    };
+
+    let body = '';
+    let currentChapter = null;
+    for (const entry of tocData) {
+      if (entry.isChapter) {
+        currentChapter = entry.title;
+        body += `<div class="toc-chapter">${esc(entry.title)}</div>`;
+      } else {
+        body += `<div class="toc-entry"><span class="toc-entry-title">${esc(entry.title)}</span><span class="toc-entry-nr">${entry.pageNr}</span></div>`;
+      }
+    }
+
+    return `<div class="pf-page"><style>${styles[style] || styles.classic}</style>
+      <div class="toc-page">
+        <div class="toc-title">Inhaltsverzeichnis<div class="toc-sub">${esc(colName)}</div></div>
+        ${body}
+        <div class="toc-footer"><span>${esc(copyright)}</span><span>Seite ${pageNr} / ${total}</span></div>
+      </div></div>`;
+  }
+
+  // ── Chapter Cover Generator ──
+
+  function generateChapterCoverPage(entry, style, pageNr, total, datum) {
+    const colName = active?.name || '';
+    const copyright = active?.copyright || '';
+    const untertitel = active?.untertitel || '';
+    const styles = {
+      bold: `
+        .cc-page{font-family:'Montserrat',sans-serif;position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#003366;color:#fff}
+        .cc-nr{position:absolute;top:50px;left:60px;font-size:80px;font-weight:700;color:rgba(255,255,255,0.1)}
+        .cc-center{text-align:center;padding:40px}
+        .cc-label{font-size:11px;text-transform:uppercase;letter-spacing:3px;color:#B87333;margin-bottom:16px}
+        .cc-title{font-size:38px;font-weight:700;line-height:1.2;margin-bottom:12px}
+        .cc-sub{font-size:13px;color:rgba(255,255,255,0.6)}
+        .cc-footer{position:absolute;bottom:30px;left:60px;right:60px;font-size:8px;color:rgba(255,255,255,0.4);display:flex;justify-content:space-between}
+      `,
+      elegant: `
+        .cc-page{font-family:'Montserrat',sans-serif;position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#fff;color:#222}
+        .cc-nr{display:none}
+        .cc-center{text-align:center;padding:40px;max-width:500px}
+        .cc-label{font-size:10px;text-transform:uppercase;letter-spacing:4px;color:#B87333;margin-bottom:20px}
+        .cc-title{font-size:32px;font-weight:600;line-height:1.3;margin-bottom:20px;padding-bottom:20px;border-bottom:2px solid #B87333}
+        .cc-sub{font-size:12px;color:#888}
+        .cc-footer{position:absolute;bottom:30px;left:60px;right:60px;font-size:8px;color:#bbb;display:flex;justify-content:space-between;border-top:1px solid #e0e0e0;padding-top:6px}
+      `,
+      stripe: `
+        .cc-page{font-family:'Montserrat',sans-serif;position:relative;width:100%;height:100%;display:flex;align-items:center;background:#fff;color:#222}
+        .cc-page::before{content:'';position:absolute;left:0;top:0;bottom:0;width:80px;background:#003366}
+        .cc-nr{position:absolute;left:0;top:50%;transform:translateY(-50%) rotate(-90deg);font-size:14px;font-weight:700;color:rgba(255,255,255,0.6);letter-spacing:3px;text-transform:uppercase;width:200px;text-align:center;transform-origin:center}
+        .cc-center{padding:40px 60px 40px 120px}
+        .cc-label{font-size:10px;text-transform:uppercase;letter-spacing:3px;color:#B87333;margin-bottom:12px}
+        .cc-title{font-size:36px;font-weight:700;line-height:1.2;margin-bottom:10px;color:#003366}
+        .cc-sub{font-size:12px;color:#888}
+        .cc-footer{position:absolute;bottom:30px;left:120px;right:60px;font-size:8px;color:#bbb;display:flex;justify-content:space-between}
+      `,
+    };
+
+    return `<div class="pf-page"><style>${styles[style] || styles.bold}</style>
+      <div class="cc-page">
+        <div class="cc-nr">Kapitel ${entry.chapterNr}</div>
+        <div class="cc-center">
+          <div class="cc-label">Kapitel ${entry.chapterNr}</div>
+          <div class="cc-title">${esc(entry.chapterName)}</div>
+          <div class="cc-sub">${esc(colName)}${untertitel ? ' · ' + esc(untertitel) : ''}</div>
+        </div>
+        <div class="cc-footer"><span>${esc(copyright)}</span><span>${datum}</span><span>Seite ${pageNr} / ${total}</span></div>
+      </div></div>`;
+  }
+
+  function buildPdfPage(snippet, itemIdx, pageIdx, gp, totalPages, displayTotal, s) {
+    // Legacy function kept for compatibility - not used in new export
+    return '';
   }
 
   function scopeCssViaCSSOM(cssText, scope) {

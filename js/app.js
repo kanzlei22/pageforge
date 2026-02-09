@@ -247,6 +247,13 @@ const PageForge = (() => {
     if (!btn || !modal) return;
 
     const versions = [
+      { v: '8.0', date: '09.02.2026', items: [
+        '⭐ Favoriten: Seiten als Favorit markieren, Filter für nur Favoriten',
+        '📖 Inhaltsverzeichnis: Auto-generiert aus Kapiteln + Seitentiteln (3 CSS-Stile)',
+        '🔷 Kapitel-Deckblätter: Automatische Trennseiten zwischen Kapiteln (3 CSS-Stile)',
+        'Design-Fix: ➕ Button überlappt nicht mehr den Collection-Namen',
+        'TOC + Kapitel-Deckblätter korrekt in Seitennummerierung integriert',
+      ]},
       { v: '7.8', date: '09.02.2026', items: [
         'Profimodus: Einstellung unter ⚙️ → aktiviert Auto-Paste bei ➕',
         'Im Profimodus liest ➕ automatisch die Zwischenablage und fügt HTML ein',
