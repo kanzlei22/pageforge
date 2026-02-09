@@ -31,7 +31,7 @@ const LibraryModule = (() => {
               <span class="search-x" id="lib-search-x" style="display:none">✕</span>
             </div>
             <div class="lib-size-ctrl"><span class="meta-dim">Größe</span>
-              <input type="range" id="lib-preview-size" min="120" max="700" value="250" class="size-slider" />
+              <input type="range" id="lib-preview-size" min="120" max="350" value="250" class="size-slider" />
             </div>
             <div class="view-toggle">
               <button class="vbtn active" data-v="grid" title="Raster">⊞</button>
@@ -60,27 +60,21 @@ const LibraryModule = (() => {
       document.querySelectorAll('.vbtn').forEach(x => x.classList.remove('active'));
       b.classList.add('active'); viewMode = b.dataset.v; render();
     }));
-    $('lib-preview-size').addEventListener('input', e => { previewHeight = parseInt(e.target.value); updateSizes(); });
+    $('lib-preview-size').addEventListener('input', e => {
+      previewHeight = parseInt(e.target.value);
+      clearTimeout(renderTimer);
+      renderTimer = setTimeout(() => render(), 80);
+    });
   }
 
-  function updateSizes() {
+  let renderTimer = null;
+
+  function updateGridLayout() {
     const scale = previewHeight / 1123, w = Math.round(794 * scale);
     const grid = $('lib-grid');
     if (viewMode === 'grid') {
       grid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${w + 20}px, 1fr))`;
-      document.querySelectorAll('.lc-preview-wrap').forEach(c => {
-        c.style.height = previewHeight + 'px';
-        const f = c.querySelector('.mini-frame');
-        if (f) try { f.contentDocument.documentElement.style.zoom = scale; } catch (e) {}
-      });
-    }
-    if (viewMode === 'list') {
-      const lH = Math.max(50, Math.round(previewHeight * 0.8)), lW = Math.round(lH * 794 / 1123), lS = lH / 1123;
-      document.querySelectorAll('.lli-preview-wrap').forEach(c => {
-        c.style.width = lW + 'px'; c.style.height = lH + 'px';
-        const f = c.querySelector('.mini-frame');
-        if (f) try { f.contentDocument.documentElement.style.zoom = lS; } catch (e) {}
-      });
+      grid.style.setProperty('--card-s', Math.min(2, Math.max(1, previewHeight / 250)).toFixed(2));
     }
   }
 
@@ -161,7 +155,6 @@ const LibraryModule = (() => {
       grid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${cardW}px, 1fr))`;
       grid.style.setProperty('--card-s', Math.min(2, Math.max(1, previewHeight / 250)).toFixed(2));
     }
-
     grid.innerHTML = items.map(s => {
       const cat = allCategories.find(c => c.id === s.category);
       const date = new Date(s.updatedAt).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });

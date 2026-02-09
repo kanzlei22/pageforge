@@ -60,7 +60,7 @@ const CollectionsModule = (() => {
               <button id="btn-rename-item" class="tb2 tb2-ghost tb2-sm" title="Umbenennen">✏️</button>
               <button id="btn-del-item" class="tb2 tb2-ghost tb2-sm" title="Entfernen">🗑️</button>
               <div class="col-size-ctrl"><span class="meta-dim">Größe</span>
-                <input type="range" id="col-preview-size" min="30" max="120" value="48" class="size-slider" />
+                <input type="range" id="col-preview-size" min="30" max="350" value="48" class="size-slider" />
               </div>
             </div>
             <div class="col-pages" id="col-pages"></div>
