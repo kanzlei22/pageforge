@@ -522,8 +522,10 @@ const CollectionsModule = (() => {
 
   async function deleteCollection() {
     if (!active || !confirm(`"${active.name}" löschen?`)) return;
-    await PageForgeDB.remove('collections', active.id);
-    clearEditor(); allCollections = allCollections.filter(c => c.id !== active.id); updateDropdown();
+    const id = active.id;
+    await PageForgeDB.remove('collections', id);
+    clearEditor(); allCollections = allCollections.filter(c => c.id !== id); updateDropdown();
+    PageForgeEvents.emit(PageForgeEvents.EVENTS.COLLECTION_DELETED, { id });
     toast('Gelöscht', 'info');
   }
 

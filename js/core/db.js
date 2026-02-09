@@ -220,11 +220,11 @@ h2 { font-size: 14pt; color: #4a5568; margin: 0 0 16px; }
     return snippet;
   }
 
-  async function createNewVersion(snippetId) {
+  async function createNewVersion(snippetId, note) {
     const s = await get('snippets', snippetId);
     if (!s) return null;
     s.versions = s.versions || [];
-    s.versions.push({ version: s.version, htmlContent: s.htmlContent, originalCss: s.originalCss, status: s.status, savedAt: new Date().toISOString() });
+    s.versions.push({ version: s.version, htmlContent: s.htmlContent, originalCss: s.originalCss, status: s.status, note: note || '', savedAt: new Date().toISOString() });
     s.version += 1; s.updatedAt = new Date().toISOString();
     await put('snippets', s);
     return s;

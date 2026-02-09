@@ -18,6 +18,8 @@ const EditorModule = (() => {
     PageForgeEvents.on(PageForgeEvents.EVENTS.SNIPPET_EDIT, loadSnippet);
     PageForgeEvents.on(PageForgeEvents.EVENTS.CSS_TEMPLATE_CHANGED, loadDropdowns);
     PageForgeEvents.on(PageForgeEvents.EVENTS.CATEGORY_ADDED, loadDropdowns);
+    PageForgeEvents.on(PageForgeEvents.EVENTS.COLLECTION_SAVED, loadCollectionDropdown);
+    PageForgeEvents.on(PageForgeEvents.EVENTS.COLLECTION_DELETED, loadCollectionDropdown);
   }
 
   function $(id) { return document.getElementById(id); }
@@ -46,6 +48,7 @@ const EditorModule = (() => {
           </div>
           <div class="etb-right">
             <input type="text" id="editor-tags" class="tags-input-v2" placeholder="Tags (kommagetrennt)…" />
+            <select id="editor-collection" class="tsel-v2" title="Zu Collection hinzufügen"><option value="">📑 Collection…</option></select>
             <button id="btn-code-drawer" class="tb2 tb2-outline" title="HTML Code">{ } Code</button>
             <button id="btn-css-swap" class="tb2 tb2-outline" title="CSS austauschen">🎨 CSS</button>
             <button id="btn-images" class="tb2 tb2-outline" title="Bilder verwalten">🖼️</button>
@@ -53,6 +56,7 @@ const EditorModule = (() => {
             <button id="btn-preview-print" class="tb2 tb2-outline" title="Drucken">🖨️</button>
             <button id="btn-save-snippet" class="tb2 tb2-primary" title="⌘S">💾 Speichern</button>
             <button id="btn-save-new-version" class="tb2 tb2-ghost" title="Neue Version" style="display:none">v+</button>
+            <button id="btn-version-history" class="tb2 tb2-ghost" title="Versionshistorie" style="display:none">📜</button>
             <button id="btn-new-snippet" class="tb2 tb2-ghost" title="Neu">➕</button>
           </div>
         </div>
@@ -128,6 +132,14 @@ const EditorModule = (() => {
           </div>
         </div>
 
+        <!-- Version History Modal -->
+        <div class="modal-backdrop" id="modal-versions" style="display:none">
+          <div class="modal-content modal-lg">
+            <div class="modal-header"><h3>📜 Versionshistorie</h3><span id="ver-current-badge" class="meta-dim"></span><button class="modal-close" id="ver-modal-close">✕</button></div>
+            <div class="modal-body"><div class="ver-list" id="ver-list"></div></div>
+          </div>
+        </div>
+
         <!-- Placeholder Picker -->
         <div class="placeholder-picker" id="placeholder-picker" style="display:none"></div>
       </div>
@@ -153,6 +165,10 @@ const EditorModule = (() => {
     $('btn-from-template').addEventListener('click', openTemplatePicker);
     $('tpl-modal-close').addEventListener('click', () => $('modal-templates').style.display = 'none');
     $('modal-templates').addEventListener('click', e => { if (e.target.id === 'modal-templates') e.target.style.display = 'none'; });
+
+    $('btn-version-history').addEventListener('click', openVersionHistory);
+    $('ver-modal-close').addEventListener('click', () => $('modal-versions').style.display = 'none');
+    $('modal-versions').addEventListener('click', e => { if (e.target.id === 'modal-versions') e.target.style.display = 'none'; });
 
     $('btn-images').addEventListener('click', openImageManager);
     $('img-modal-close').addEventListener('click', () => $('modal-images').style.display = 'none');
@@ -545,6 +561,75 @@ const EditorModule = (() => {
     sel.innerHTML = '<option value="">Kategorie…</option>';
     cats.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = `${c.icon} ${c.name}`; sel.appendChild(o); });
     sel.value = v;
+    await loadCollectionDropdown();
+  }
+
+  async function loadCollectionDropdown() {
+    const colSel = $('editor-collection');
+    if (!colSel) return;
+    const cv = colSel.value;
+    const collections = await PageForgeDB.getAll('collections');
+    colSel.innerHTML = '<option value="">📑 Collection…</option>';
+    collections.forEach(col => {
+      const items = col.items || [];
+      // Standalone option
+      const so = document.createElement('option');
+      so.value = `${col.id}::standalone`;
+      so.textContent = `📑 ${col.name} → Einzelseite`;
+      colSel.appendChild(so);
+      // Chapter options
+      items.forEach((item, idx) => {
+        if (item.type !== 'chapter') return;
+        const o = document.createElement('option');
+        o.value = `${col.id}::chapter::${idx}`;
+        o.textContent = `    📖 ${item.name}`;
+        colSel.appendChild(o);
+      });
+    });
+    colSel.value = cv;
+  }
+
+  function detectCollectionMembership(snippetId) {
+    // Returns collection dropdown value if snippet is in a collection
+    if (!snippetId) return '';
+    // Async but we fire-and-forget for preselection
+    return new Promise(async resolve => {
+      const collections = await PageForgeDB.getAll('collections');
+      for (const col of collections) {
+        for (let i = 0; i < (col.items || []).length; i++) {
+          const item = col.items[i];
+          if (item.type === 'page' && item.snippetId === snippetId) return resolve(`${col.id}::standalone`);
+          if (item.type === 'chapter' && item.snippetIds?.includes(snippetId)) return resolve(`${col.id}::chapter::${i}`);
+        }
+      }
+      resolve('');
+    });
+  }
+
+  async function addSnippetToCollection(snippetId) {
+    const val = $('editor-collection')?.value;
+    if (!val) return;
+    const parts = val.split('::');
+    const colId = parts[0];
+    const col = await PageForgeDB.get('collections', colId);
+    if (!col) return;
+    if (!col.items) col.items = [];
+
+    // Check if already in this collection
+    const alreadyIn = col.items.some(item =>
+      (item.type === 'page' && item.snippetId === snippetId) ||
+      (item.type === 'chapter' && item.snippetIds?.includes(snippetId))
+    );
+    if (alreadyIn) return;
+
+    if (parts[1] === 'standalone') {
+      col.items.push({ type: 'page', snippetId });
+    } else if (parts[1] === 'chapter') {
+      const idx = parseInt(parts[2]);
+      if (col.items[idx]?.type === 'chapter') col.items[idx].snippetIds.push(snippetId);
+    }
+    await PageForgeDB.saveCollection(col);
+    PageForgeEvents.emit(PageForgeEvents.EVENTS.COLLECTION_SAVED, col);
   }
 
   // ── Save ──
@@ -553,6 +638,7 @@ const EditorModule = (() => {
     const title = $('editor-title').value.trim();
     if (!title) { $('editor-title').focus(); $('editor-title').classList.add('input-error'); setTimeout(() => $('editor-title').classList.remove('input-error'), 1500); toast('Bitte Titel eingeben', 'warning'); return; }
     if (!currentSnippet?.htmlContent) { toast('Kein HTML Code', 'warning'); return; }
+    const isNew = !currentSnippet.id;
     const tags = $('editor-tags').value.split(',').map(t => t.trim()).filter(Boolean);
     currentSnippet.title = title;
     currentSnippet.category = $('editor-category').value || null;
@@ -561,14 +647,18 @@ const EditorModule = (() => {
     const saved = await PageForgeDB.saveSnippet(currentSnippet);
     currentSnippet = saved;
     for (const tag of tags) await PageForgeDB.put('tags', { id: tag.toLowerCase().replace(/\s+/g, '-'), name: tag });
-    $('btn-save-new-version').style.display = '';
+    if (isNew) await addSnippetToCollection(saved.id);
+    showVersionButtons(true);
     PageForgeEvents.emit(PageForgeEvents.EVENTS.SNIPPET_SAVED, saved);
-    toast(`"${title}" gespeichert`, 'success');
+    const colVal = $('editor-collection')?.value;
+    toast(`"${title}" gespeichert${colVal && isNew ? ' + Collection' : ''}`, 'success');
   }
 
   async function saveNewVersion() {
     if (!currentSnippet?.id) return;
-    const u = await PageForgeDB.createNewVersion(currentSnippet.id);
+    const note = prompt('Was wurde geändert? (optional):', '');
+    if (note === null) return; // cancelled
+    const u = await PageForgeDB.createNewVersion(currentSnippet.id, note);
     u.htmlContent = currentSnippet.htmlContent;
     u.originalCss = currentSnippet.originalCss;
     u.category = $('editor-category').value || null;
@@ -576,8 +666,69 @@ const EditorModule = (() => {
     u.tags = $('editor-tags').value.split(',').map(t => t.trim()).filter(Boolean);
     await PageForgeDB.put('snippets', u);
     currentSnippet = u;
+    showVersionButtons(true);
     PageForgeEvents.emit(PageForgeEvents.EVENTS.SNIPPET_UPDATED, u);
-    toast(`Version ${u.version}`, 'success');
+    toast(`Version ${u.version}${note ? ': ' + note : ''}`, 'success');
+  }
+
+  function showVersionButtons(show) {
+    $('btn-save-new-version').style.display = show ? '' : 'none';
+    const hasVersions = currentSnippet?.versions?.length > 0;
+    $('btn-version-history').style.display = show && hasVersions ? '' : 'none';
+  }
+
+  async function openVersionHistory() {
+    if (!currentSnippet?.id) return;
+    // Re-read from DB to get latest versions
+    const fresh = await PageForgeDB.get('snippets', currentSnippet.id);
+    if (!fresh) return;
+    const versions = fresh.versions || [];
+    if (!versions.length) { toast('Keine älteren Versionen', 'info'); return; }
+
+    $('ver-current-badge').textContent = `Aktuelle Version: v${fresh.version}`;
+    const stMap = { draft: '⏳ Entwurf', review: '🔍 Review', final: '✅ Final' };
+    const list = $('ver-list');
+    list.innerHTML = versions.slice().reverse().map((v, ri) => {
+      const idx = versions.length - 1 - ri;
+      const date = new Date(v.savedAt).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+      return `<div class="ver-item" data-idx="${idx}">
+        <div class="ver-preview" data-vidx="${idx}"></div>
+        <div class="ver-info">
+          <div class="ver-title">Version ${v.version}</div>
+          ${v.note ? `<div class="ver-note">${esc(v.note)}</div>` : ''}
+          <div class="ver-meta">${stMap[v.status] || ''} · ${date}</div>
+        </div>
+        <div class="ver-actions">
+          <button class="tb2 tb2-outline tb2-sm ver-restore" data-idx="${idx}">↩️ Laden</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Inject previews
+    list.querySelectorAll('.ver-preview[data-vidx]').forEach(container => {
+      const idx = parseInt(container.dataset.vidx);
+      const v = versions[idx];
+      if (v?.htmlContent) injectMiniIframe(container, v.htmlContent, 0.12);
+    });
+
+    // Bind restore
+    list.querySelectorAll('.ver-restore').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.idx);
+        const v = versions[idx];
+        if (!v || !confirm(`Version ${v.version} laden? Der aktuelle Stand wird NICHT automatisch gespeichert.`)) return;
+        currentSnippet.htmlContent = v.htmlContent;
+        if (v.originalCss) currentSnippet.originalCss = v.originalCss;
+        const p = parseHtmlAndCss(v.htmlContent);
+        extractedCss = p.css; extractedHtml = p.htmlShell;
+        $('code-textarea').value = v.htmlContent;
+        renderPreview();
+        $('modal-versions').style.display = 'none';
+        toast(`Version ${v.version} geladen – Speichern nicht vergessen`, 'info');
+      });
+    });
+
+    $('modal-versions').style.display = 'flex';
   }
 
   // ── Load ──
@@ -588,7 +739,7 @@ const EditorModule = (() => {
     $('editor-category').value = snippet.category || '';
     $('editor-status').value = snippet.status || 'draft';
     $('editor-tags').value = (snippet.tags || []).join(', ');
-    $('btn-save-new-version').style.display = '';
+    showVersionButtons(true);
     const p = parseHtmlAndCss(snippet.htmlContent || '');
     extractedCss = p.css; extractedHtml = p.htmlShell;
     if (!currentSnippet.originalCss && extractedCss) currentSnippet.originalCss = extractedCss;
@@ -596,6 +747,10 @@ const EditorModule = (() => {
     $('a4-container').style.display = '';
     renderPreview();
     $('code-textarea').value = snippet.htmlContent || '';
+    // Detect collection membership
+    loadCollectionDropdown().then(() => {
+      detectCollectionMembership(snippet.id).then(val => { if ($('editor-collection')) $('editor-collection').value = val; });
+    });
     PageForgeEvents.emit(PageForgeEvents.EVENTS.TAB_CHANGED, 'editor');
   }
 
@@ -603,7 +758,8 @@ const EditorModule = (() => {
     currentSnippet = null; extractedCss = ''; extractedHtml = '';
     $('editor-title').value = ''; $('editor-category').value = ''; $('editor-status').value = 'draft';
     $('editor-tags').value = ''; $('code-textarea').value = '';
-    $('btn-save-new-version').style.display = 'none';
+    if ($('editor-collection')) $('editor-collection').value = '';
+    showVersionButtons(false);
     $('preview-empty').style.display = ''; $('a4-container').style.display = 'none';
   }
 

@@ -7,9 +7,11 @@
  */
 const LibraryModule = (() => {
   let allSnippets = [], allCategories = [], allTags = [];
-  let filters = { query: '', category: '', status: '', tag: '' };
+  let collectionMap = {}; // snippetId → [{name, id}]
+  let filters = { query: '', category: '', status: '', tag: '', sort: 'date-desc' };
   let viewMode = 'grid';
   let previewHeight = 250;
+  let selected = new Set();
 
   function $(id) { return document.getElementById(id); }
 
@@ -19,6 +21,8 @@ const LibraryModule = (() => {
     PageForgeEvents.on(PageForgeEvents.EVENTS.SNIPPET_UPDATED, refresh);
     PageForgeEvents.on(PageForgeEvents.EVENTS.SNIPPET_DELETED, refresh);
     PageForgeEvents.on(PageForgeEvents.EVENTS.LIBRARY_REFRESH, refresh);
+    PageForgeEvents.on(PageForgeEvents.EVENTS.COLLECTION_SAVED, refresh);
+    PageForgeEvents.on(PageForgeEvents.EVENTS.COLLECTION_DELETED, refresh);
   }
 
   function buildUI() {
@@ -42,9 +46,23 @@ const LibraryModule = (() => {
             <select id="lf-cat" class="fsel"><option value="">Alle Kategorien</option></select>
             <select id="lf-status" class="fsel"><option value="">Alle Status</option>
               <option value="draft">⏳ Entwurf</option><option value="review">🔍 Review</option><option value="final">✅ Final</option></select>
+            <select id="lf-sort" class="fsel">
+              <option value="date-desc">📅 Neueste zuerst</option>
+              <option value="date-asc">📅 Älteste zuerst</option>
+              <option value="title-asc">🔤 A → Z</option>
+              <option value="title-desc">🔤 Z → A</option>
+              <option value="category">📁 Kategorie</option>
+            </select>
             <span class="lib-count" id="lib-count"></span>
           </div>
           <div class="lib-tagcloud" id="lib-tagcloud"></div>
+          <div class="lib-bulk-bar" id="lib-bulk-bar" style="display:none">
+            <label class="bulk-sel-all"><input type="checkbox" id="bulk-sel-all" /> <span id="bulk-count">0</span> ausgewählt</label>
+            <button class="tb2 tb2-outline tb2-sm" id="bulk-status" title="Status ändern">🔄 Status</button>
+            <button class="tb2 tb2-outline tb2-sm" id="bulk-collection" title="Zu Collection">📑 Collection</button>
+            <button class="tb2 tb2-outline tb2-sm" id="bulk-delete" title="Löschen">🗑️ Löschen</button>
+            <button class="tb2 tb2-ghost tb2-sm" id="bulk-cancel">✕ Abbrechen</button>
+          </div>
         </div>
         <div class="lib-grid" id="lib-grid"></div>
       </div>`;
@@ -56,6 +74,7 @@ const LibraryModule = (() => {
     sx.addEventListener('click', () => { si.value = ''; filters.query = ''; sx.style.display = 'none'; render(); });
     $('lf-cat').addEventListener('change', e => { filters.category = e.target.value; render(); });
     $('lf-status').addEventListener('change', e => { filters.status = e.target.value; render(); });
+    $('lf-sort').addEventListener('change', e => { filters.sort = e.target.value; render(); });
     document.querySelectorAll('.vbtn').forEach(b => b.addEventListener('click', () => {
       document.querySelectorAll('.vbtn').forEach(x => x.classList.remove('active'));
       b.classList.add('active'); viewMode = b.dataset.v; render();
@@ -65,6 +84,17 @@ const LibraryModule = (() => {
       clearTimeout(renderTimer);
       renderTimer = setTimeout(() => render(), 80);
     });
+
+    // Bulk actions
+    $('bulk-cancel').addEventListener('click', () => { selected.clear(); updateBulkBar(); render(); });
+    $('bulk-sel-all').addEventListener('change', e => {
+      const items = getFiltered();
+      if (e.target.checked) items.forEach(s => selected.add(s.id)); else selected.clear();
+      updateBulkBar(); render();
+    });
+    $('bulk-delete').addEventListener('click', bulkDelete);
+    $('bulk-status').addEventListener('click', bulkStatus);
+    $('bulk-collection').addEventListener('click', bulkCollection);
   }
 
   let renderTimer = null;
@@ -82,6 +112,27 @@ const LibraryModule = (() => {
     allSnippets = await PageForgeDB.getAll('snippets');
     allCategories = await PageForgeDB.getAll('categories');
     allTags = await PageForgeDB.getAll('tags');
+
+    // Build collection membership map
+    collectionMap = {};
+    const collections = await PageForgeDB.getAll('collections');
+    collections.forEach(col => {
+      (col.items || []).forEach(item => {
+        if (item.type === 'page' && item.snippetId) {
+          (collectionMap[item.snippetId] = collectionMap[item.snippetId] || []).push({ name: col.name, id: col.id });
+        }
+        if (item.type === 'chapter') {
+          (item.snippetIds || []).forEach(sid => {
+            (collectionMap[sid] = collectionMap[sid] || []).push({ name: col.name, id: col.id });
+          });
+        }
+      });
+    });
+    // Deduplicate (same snippet in multiple chapters of same collection)
+    Object.keys(collectionMap).forEach(k => {
+      const seen = new Set();
+      collectionMap[k] = collectionMap[k].filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
+    });
 
     // Update category filter
     const catS = $('lf-cat');
@@ -131,7 +182,19 @@ const LibraryModule = (() => {
         && (!filters.category || s.category === filters.category)
         && (!filters.status || s.status === filters.status)
         && (!filters.tag || s.tags?.includes(filters.tag));
-    }).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    }).sort((a, b) => {
+      switch (filters.sort) {
+        case 'date-asc': return new Date(a.updatedAt) - new Date(b.updatedAt);
+        case 'title-asc': return (a.title || '').localeCompare(b.title || '', 'de');
+        case 'title-desc': return (b.title || '').localeCompare(a.title || '', 'de');
+        case 'category': {
+          const ca = allCategories.find(c => c.id === a.category)?.name || 'zzz';
+          const cb = allCategories.find(c => c.id === b.category)?.name || 'zzz';
+          return ca.localeCompare(cb, 'de') || new Date(b.updatedAt) - new Date(a.updatedAt);
+        }
+        default: return new Date(b.updatedAt) - new Date(a.updatedAt);
+      }
+    });
   }
 
   function render() {
@@ -158,22 +221,26 @@ const LibraryModule = (() => {
     grid.innerHTML = items.map(s => {
       const cat = allCategories.find(c => c.id === s.category);
       const date = new Date(s.updatedAt).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
+      const cols = collectionMap[s.id] || [];
+      const colBadges = cols.map(c => `<span class="col-badge" title="${esc(c.name)}">📑 ${esc(c.name)}</span>`).join('');
       if (viewMode === 'list') {
-        return `<div class="lib-list-item" data-id="${s.id}">
+        return `<div class="lib-list-item${selected.has(s.id) ? ' lib-selected' : ''}" data-id="${s.id}">
+          <input type="checkbox" class="lib-chk" data-id="${s.id}" ${selected.has(s.id) ? 'checked' : ''} />
           <div class="lli-preview-wrap" data-id="${s.id}" style="width:${listW}px;height:${listH}px"></div>
           <div class="lli-info"><div class="lli-title">${esc(s.title)}</div>
             <div class="lli-meta">${cat ? `<span>${cat.icon} ${cat.name}</span>` : ''}
               <span class="status-badge sb-${s.status}">${stMap[s.status] || ''}</span>
-              <span class="meta-dim">${date} · v${s.version || 1}</span></div>
+              <span class="meta-dim">${date} · v${s.version || 1}</span>${colBadges}</div>
             <div class="lli-tags">${(s.tags || []).map(t => `<span class="tag-chip">${esc(t)}</span>`).join('')}</div></div>
           <div class="lli-acts"><button class="abtn a-edit" data-id="${s.id}">✏️</button><button class="abtn a-dup" data-id="${s.id}">📋</button><button class="abtn a-del" data-id="${s.id}">🗑️</button></div>
         </div>`;
       }
-      return `<div class="lib-card" data-id="${s.id}">
+      return `<div class="lib-card${selected.has(s.id) ? ' lib-selected' : ''}" data-id="${s.id}">
+        <input type="checkbox" class="lib-chk lib-chk-grid" data-id="${s.id}" ${selected.has(s.id) ? 'checked' : ''} />
         <div class="lc-preview-wrap" data-id="${s.id}" style="height:${previewHeight}px"></div>
         <div class="lc-body"><div class="lc-title">${esc(s.title)}</div>
           <div class="lc-meta">${cat ? `<span>${cat.icon} ${cat.name}</span>` : ''}<span class="status-badge sb-${s.status}">${stMap[s.status] || ''}</span></div>
-          <div class="lc-tags">${(s.tags || []).slice(0, 3).map(t => `<span class="tag-chip">${esc(t)}</span>`).join('')}</div>
+          ${cols.length ? `<div class="lc-cols">${colBadges}</div>` : ''}
           <div class="lc-foot"><span class="meta-dim">${date} · v${s.version || 1}</span>
             <div class="lc-acts"><button class="abtn a-dup" data-id="${s.id}">📋</button><button class="abtn a-del" data-id="${s.id}">🗑️</button></div></div></div>
       </div>`;
@@ -226,8 +293,18 @@ const LibraryModule = (() => {
   }
 
   function bindActions(grid) {
+    // Checkbox toggle
+    grid.querySelectorAll('.lib-chk').forEach(chk => {
+      chk.addEventListener('click', e => e.stopPropagation());
+      chk.addEventListener('change', e => {
+        const id = chk.dataset.id;
+        if (chk.checked) selected.add(id); else selected.delete(id);
+        chk.closest('.lib-card,.lib-list-item')?.classList.toggle('lib-selected', chk.checked);
+        updateBulkBar();
+      });
+    });
     grid.querySelectorAll('.lib-card,.lib-list-item').forEach(el => {
-      el.addEventListener('click', async e => { if (e.target.closest('.abtn')) return;
+      el.addEventListener('click', async e => { if (e.target.closest('.abtn') || e.target.closest('.lib-chk')) return;
         const s = await PageForgeDB.get('snippets', el.dataset.id);
         if (s) PageForgeEvents.emit(PageForgeEvents.EVENTS.SNIPPET_EDIT, s);
       });
@@ -250,6 +327,72 @@ const LibraryModule = (() => {
       PageForgeEvents.emit(PageForgeEvents.EVENTS.TOAST, { message: 'Gelöscht', type: 'info' });
     }));
   }
+
+  // ── Bulk Actions ──
+
+  function updateBulkBar() {
+    const bar = $('lib-bulk-bar');
+    if (selected.size > 0) {
+      bar.style.display = '';
+      $('bulk-count').textContent = selected.size;
+      $('bulk-sel-all').checked = selected.size === getFiltered().length;
+    } else {
+      bar.style.display = 'none';
+    }
+  }
+
+  async function bulkDelete() {
+    if (!selected.size) return;
+    if (!confirm(`${selected.size} Seiten löschen?`)) return;
+    for (const id of selected) {
+      await PageForgeDB.remove('snippets', id);
+      PageForgeEvents.emit(PageForgeEvents.EVENTS.SNIPPET_DELETED, { id });
+    }
+    selected.clear(); updateBulkBar(); refresh();
+    PageForgeEvents.emit(PageForgeEvents.EVENTS.TOAST, { message: `${selected.size || 'Alle'} gelöscht`, type: 'info' });
+  }
+
+  async function bulkStatus() {
+    if (!selected.size) return;
+    const status = prompt('Neuer Status (draft / review / final):');
+    if (!status || !['draft', 'review', 'final'].includes(status)) { toast('Ungültiger Status', 'warning'); return; }
+    for (const id of selected) {
+      const s = await PageForgeDB.get('snippets', id);
+      if (s) { s.status = status; await PageForgeDB.saveSnippet(s); }
+    }
+    selected.clear(); updateBulkBar(); refresh();
+    PageForgeEvents.emit(PageForgeEvents.EVENTS.TOAST, { message: `Status geändert`, type: 'success' });
+  }
+
+  async function bulkCollection() {
+    if (!selected.size) return;
+    const collections = await PageForgeDB.getAll('collections');
+    if (!collections.length) { toast('Keine Collections vorhanden', 'warning'); return; }
+    const choices = collections.map((c, i) => `${i + 1}. ${c.name}`).join('\n');
+    const pick = prompt(`Zu Collection hinzufügen:\n${choices}\n\nNummer eingeben:`);
+    if (!pick) return;
+    const idx = parseInt(pick) - 1;
+    const col = collections[idx];
+    if (!col) { toast('Ungültige Auswahl', 'warning'); return; }
+
+    // Add as standalone pages
+    if (!col.items) col.items = [];
+    const existing = new Set();
+    col.items.forEach(item => {
+      if (item.type === 'page') existing.add(item.snippetId);
+      if (item.type === 'chapter') item.snippetIds?.forEach(id => existing.add(id));
+    });
+    let added = 0;
+    for (const id of selected) {
+      if (!existing.has(id)) { col.items.push({ type: 'page', snippetId: id }); added++; }
+    }
+    await PageForgeDB.saveCollection(col);
+    PageForgeEvents.emit(PageForgeEvents.EVENTS.COLLECTION_SAVED, col);
+    selected.clear(); updateBulkBar(); render();
+    toast(`${added} Seiten zu "${col.name}" hinzugefügt`, 'success');
+  }
+
+  function toast(msg, type) { PageForgeEvents.emit(PageForgeEvents.EVENTS.TOAST, { message: msg, type }); }
 
   function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
   return { init, refresh };
