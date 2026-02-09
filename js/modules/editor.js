@@ -571,35 +571,23 @@ const EditorModule = (() => {
     const collections = await PageForgeDB.getAll('collections');
     colSel.innerHTML = '<option value="">📑 Collection…</option>';
     collections.forEach(col => {
-      const items = col.items || [];
-      // Standalone option
-      const so = document.createElement('option');
-      so.value = `${col.id}::standalone`;
-      so.textContent = `📑 ${col.name} → Einzelseite`;
-      colSel.appendChild(so);
-      // Chapter options
-      items.forEach((item, idx) => {
-        if (item.type !== 'chapter') return;
-        const o = document.createElement('option');
-        o.value = `${col.id}::chapter::${idx}`;
-        o.textContent = `    📖 ${item.name}`;
-        colSel.appendChild(o);
-      });
+      const pages = (col.items || []).reduce((s, i) => s + (i.type === 'chapter' ? (i.snippetIds?.length || 0) : 1), 0);
+      const o = document.createElement('option');
+      o.value = col.id;
+      o.textContent = `📑 ${col.name} (${pages})`;
+      colSel.appendChild(o);
     });
     colSel.value = cv;
   }
 
   function detectCollectionMembership(snippetId) {
-    // Returns collection dropdown value if snippet is in a collection
     if (!snippetId) return '';
-    // Async but we fire-and-forget for preselection
     return new Promise(async resolve => {
       const collections = await PageForgeDB.getAll('collections');
       for (const col of collections) {
-        for (let i = 0; i < (col.items || []).length; i++) {
-          const item = col.items[i];
-          if (item.type === 'page' && item.snippetId === snippetId) return resolve(`${col.id}::standalone`);
-          if (item.type === 'chapter' && item.snippetIds?.includes(snippetId)) return resolve(`${col.id}::chapter::${i}`);
+        for (const item of (col.items || [])) {
+          if (item.type === 'page' && item.snippetId === snippetId) return resolve(col.id);
+          if (item.type === 'chapter' && item.snippetIds?.includes(snippetId)) return resolve(col.id);
         }
       }
       resolve('');
@@ -607,10 +595,8 @@ const EditorModule = (() => {
   }
 
   async function addSnippetToCollection(snippetId) {
-    const val = $('editor-collection')?.value;
-    if (!val) return;
-    const parts = val.split('::');
-    const colId = parts[0];
+    const colId = $('editor-collection')?.value;
+    if (!colId) return;
     const col = await PageForgeDB.get('collections', colId);
     if (!col) return;
     if (!col.items) col.items = [];
@@ -622,12 +608,7 @@ const EditorModule = (() => {
     );
     if (alreadyIn) return;
 
-    if (parts[1] === 'standalone') {
-      col.items.push({ type: 'page', snippetId });
-    } else if (parts[1] === 'chapter') {
-      const idx = parseInt(parts[2]);
-      if (col.items[idx]?.type === 'chapter') col.items[idx].snippetIds.push(snippetId);
-    }
+    col.items.push({ type: 'page', snippetId });
     await PageForgeDB.saveCollection(col);
     PageForgeEvents.emit(PageForgeEvents.EVENTS.COLLECTION_SAVED, col);
   }

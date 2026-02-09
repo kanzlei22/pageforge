@@ -22,6 +22,7 @@ const PageForge = (() => {
     setupToast();
     setupSettings();
     setupBackupStatus();
+    setupChangelog();
     PageForgeEvents.on(PageForgeEvents.EVENTS.TAB_CHANGED, switchTab);
     await LibraryModule.refresh();
     await CollectionsModule.refresh();
@@ -226,6 +227,110 @@ const PageForge = (() => {
     await LibraryModule.refresh();
     await CollectionsModule.refresh();
     await CssTemplatesModule.refresh();
+  }
+
+  function setupChangelog() {
+    const btn = document.getElementById('btn-changelog');
+    const modal = document.getElementById('modal-changelog');
+    const close = document.getElementById('changelog-close');
+    if (!btn || !modal) return;
+
+    const versions = [
+      { v: '7.3', date: '09.02.2026', items: [
+        'App-Versionshistorie: Klick auf Versionsnummer öffnet kompletten Changelog',
+        'Collection-Dropdown im Editor vereinfacht (nur Collection, keine Kapitel)',
+        'Fix: Mehrere Collection-Badges werden jetzt korrekt angezeigt',
+        'Version wird automatisch in Header und Changelog synchronisiert',
+      ]},
+      { v: '7.2', date: '09.02.2026', items: [
+        'Versionshistorie bei v+ mit Beschreibung – Prompt „Was wurde geändert?"',
+        'Collection-Zugehörigkeit als 📑 Badges in der Bibliothek (Grid + List)',
+        'Header-Version automatisch aktualisiert',
+      ]},
+      { v: '7.1', date: '09.02.2026', items: [
+        'Collection-Zuordnung beim Speichern im Editor',
+        'Versionshistorie-Panel (📜) mit Mini-Previews und Restore',
+        'Bibliothek-Sortierung: Datum, Titel A-Z/Z-A, Kategorie',
+        'Bulk-Aktionen: Mehrfachauswahl mit Checkboxen, Status ändern, löschen, zu Collection',
+      ]},
+      { v: '6.7', date: '09.02.2026', items: [
+        'Collection-Zoom erhöht (Slider bis 350px)',
+      ]},
+      { v: '6.6', date: '09.02.2026', items: [
+        'Grid-Slider gedeckelt auf 120–350px (sinnvoller Bereich)',
+        'Overlay-Design entfernt (in Ruhe überdenken)',
+      ]},
+      { v: '6.5', date: '09.02.2026', items: [
+        'Grid-Karten: Text skaliert proportional mit Thumbnail-Größe',
+        'List-View: Slider löst vollen Re-Render aus (Zoom-Fix für Scrollbereich)',
+      ]},
+      { v: '6.4', date: '09.02.2026', items: [
+        'Fix: Sidebar z-index – Collections ➕ Button war nicht klickbar (empty-state Overlay)',
+      ]},
+      { v: '6.3', date: '09.02.2026', items: [
+        'Grid-Karten skalieren Text proportional (--card-s CSS Variable)',
+        'autoSave synchronisiert allCollections Array',
+        'createCollection mit Error-Handling',
+      ]},
+      { v: '6.2', date: '09.02.2026', items: [
+        'Fix: Collections Auto-Save – 9 Mutation-Punkte gesichert',
+        'Seiten hinzufügen, Kapitel erstellen, Drag & Drop, Löschen, Master CSS',
+      ]},
+      { v: '6.1', date: '09.02.2026', items: [
+        'Grid-Overflow Fix – Thumbnails laufen nicht mehr aus Karten',
+        'CSS Zoom für Mini-Previews statt transform:scale',
+        'Collections-Refactor: Kapitel + Einzelseiten Modell',
+      ]},
+      { v: '6.0', date: '09.02.2026', items: [
+        'Collections-Modul: Sidebar mit Kapitelstruktur',
+        'Drag & Drop für Kapitel und Seiten',
+        'Master CSS für Collections',
+        'PDF-Export für Collections',
+      ]},
+      { v: '5.0', date: '08.02.2026', items: [
+        'Komplett-Redesign: Dark Theme, modulare Architektur',
+        'Editor mit Live-Preview, Zoom-Stufen, Code-Drawer',
+        'Bibliothek mit Grid/List-View, Tag Cloud, Zoom-Slider',
+        'CSS-Swap-System mit Template-Verwaltung',
+        'Bilder-Manager mit Base64-Embedding',
+        'Platzhalter-System (Datum, Autor, Seitennr.)',
+        'Auto-Backup in localStorage, File System Access API',
+      ]},
+      { v: '4.0', date: '08.02.2026', items: [
+        'Kategorien- und Tag-System',
+        'Seiten-Templates (Page Templates)',
+        'Versionierung mit v+ Button',
+      ]},
+      { v: '3.0', date: '08.02.2026', items: [
+        'IndexedDB als Datenbank (7 Stores)',
+        'CSS-Templates Store',
+        'Bilder-Store mit Base64',
+      ]},
+      { v: '2.0', date: '08.02.2026', items: [
+        'Multi-Page Bibliothek',
+        'Suchfunktion und Filter',
+        'Status-System (Entwurf/Review/Final)',
+      ]},
+      { v: '1.0', date: '08.02.2026', items: [
+        'Erster Prototyp: Single-Page HTML Editor',
+        'A4-Vorschau mit Live-Preview',
+        'Druck-Funktion',
+      ]},
+    ];
+
+    function renderChangelog() {
+      document.getElementById('changelog-body').innerHTML = versions.map(ver =>
+        `<div class="cl-version">
+          <div class="cl-header"><span class="cl-badge">v${ver.v}</span><span class="cl-date">${ver.date}</span></div>
+          <ul class="cl-list">${ver.items.map(i => `<li>${i}</li>`).join('')}</ul>
+        </div>`
+      ).join('');
+    }
+
+    btn.style.cursor = 'pointer';
+    btn.addEventListener('click', () => { renderChangelog(); modal.style.display = 'flex'; });
+    close.addEventListener('click', () => modal.style.display = 'none');
+    modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
   }
 
   return { init };
